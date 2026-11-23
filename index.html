@@ -1,0 +1,3100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>QuickBay | Certified Garages On-Demand</title>
+
+  <!-- PWA Manifest Data URI -->
+  <link rel="manifest" href="data:application/manifest+json;utf-8,%7B%22name%22%3A%22QuickBay%22%2C%22short_name%22%3A%22QuickBay%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23000000%22%2C%22theme_color%22%3A%22%23000000%22%7D">
+
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  
+  <!-- Supabase Auth client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap');
+    * {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      box-sizing: border-box;
+    }
+    html, body {
+      height: 100%;
+      width: 100%;
+      background-color: #090a0f;
+      color: #111;
+      overflow-x: hidden;
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+    @keyframes roadMove {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-40px); }
+    }
+    @keyframes carBounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    @keyframes wheelRotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .road-lines {
+      background: repeating-linear-gradient(90deg, #ffffff 0, #ffffff 18px, transparent 18px, transparent 36px);
+      animation: roadMove 0.4s linear infinite;
+    }
+    .car-anim { animation: carBounce 0.35s ease-in-out infinite; }
+    .wheel-anim { animation: wheelRotate 0.35s linear infinite; }
+
+    /* CCTV CRT Scanline & Lens Glare */
+    .cctv-overlay {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+    }
+
+    /* Print styles specifically formatted for A4 GST Tax Invoice */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #printableInvoiceArea, #printableInvoiceArea * {
+        visibility: visible;
+      }
+      #printableInvoiceArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 20px;
+        background: white !important;
+        color: black !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+
+
+    /* Formal tax invoice styling: clean, print-ready, and document-like */
+    #printableInvoiceArea {
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 3px !important;
+      box-shadow: none !important;
+      padding: 22px !important;
+      color: #111827 !important;
+      background: #fff !important;
+      font-family: Arial, Helvetica, sans-serif !important;
+    }
+    #printableInvoiceArea > div:first-child {
+      padding-bottom: 14px;
+      border-bottom: 2px solid #111827 !important;
+    }
+    #printableInvoiceArea table {
+      border: 1px solid #cbd5e1;
+      margin-top: 8px;
+    }
+    #printableInvoiceArea thead {
+      background: #f1f5f9;
+      border-bottom: 1px solid #94a3b8;
+    }
+    #printableInvoiceArea th, #printableInvoiceArea td {
+      padding: 9px 7px !important;
+      vertical-align: top;
+    }
+    #printableInvoiceArea tbody tr {
+      border-bottom: 1px solid #e2e8f0;
+    }
+    #printableInvoiceArea #invGrandTotal {
+      font-size: 16px;
+      letter-spacing: .2px;
+    }
+    @media print {
+      @page { size: A4; margin: 14mm; }
+      #printableInvoiceArea {
+        border: 1px solid #9ca3af !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        font-size: 10pt !important;
+      }
+      #printableInvoiceArea table { page-break-inside: avoid; }
+    }
+\n  </style>
+</head>
+<body class="antialiased flex justify-center bg-neutral-950">
+
+  <!-- Camera Snapshot Flash FX -->
+  <div id="cameraFlashOverlay" class="fixed inset-0 bg-white z-[99999] opacity-0 pointer-events-none transition-opacity duration-150"></div>
+
+  <!-- Floating Toast Notification System -->
+  <div id="toastNotification" class="fixed top-5 z-[9999] max-w-sm w-11/12 mx-auto left-0 right-0 bg-neutral-900/95 backdrop-blur-md text-white border border-neutral-700 px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transform -translate-y-24 opacity-0 transition-all duration-300 pointer-events-none">
+    <div id="toastIcon" class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-sm">
+      <i class="fa-solid fa-check"></i>
+    </div>
+    <div class="flex-1 text-xs">
+      <p id="toastTitle" class="font-bold text-white">Notice</p>
+      <p id="toastMessage" class="text-neutral-300 text-[11px]">Action completed</p>
+    </div>
+  </div>
+
+  <!-- Main Mobile App Shell -->
+  <div id="appRoot" class="w-full max-w-md min-h-screen bg-white text-black flex flex-col relative overflow-x-hidden shadow-2xl pb-16">
+
+    <!-- ================= 0. PRELOADER ANIMATION ================= -->
+    <div id="loaderOverlay" class="fixed inset-0 bg-black text-white z-50 flex flex-col items-center justify-center transition-opacity duration-500">
+      <div class="relative w-48 flex flex-col items-center">
+        <div class="car-anim relative mb-1">
+          <svg class="w-28 h-12 text-white fill-current" viewBox="0 0 120 45">
+            <path d="M12,28 L24,28 C26,20 34,14 43,14 L80,14 C86,14 91,18 94,24 L106,26 C112,27 116,31 116,36 L116,38 L4,38 L4,34 C4,30.5 7.5,28 12,28 Z" />
+            <path d="M42,17 L78,17 C82,17 85,19 87,23 L40,23 C40,21 41,18 42,17 Z" fill="#000" />
+            <circle cx="28" cy="38" r="8" fill="#171717" stroke="#fff" stroke-width="2.5" />
+            <circle cx="92" cy="38" r="8" fill="#171717" stroke="#fff" stroke-width="2.5" />
+            <circle cx="28" cy="38" r="3" fill="#fff" class="wheel-anim" />
+            <circle cx="92" cy="38" r="3" fill="#fff" class="wheel-anim" />
+          </svg>
+        </div>
+        <div class="w-44 h-1.5 bg-neutral-800 rounded-full overflow-hidden relative">
+          <div class="road-lines w-[300px] h-full absolute left-0 top-0"></div>
+        </div>
+        <h2 class="text-xl font-extrabold tracking-tight mt-6 text-white">Quick<span class="text-neutral-400">Bay</span></h2>
+        <p class="text-xs text-neutral-400 font-medium tracking-wide mt-1">Certified Garages On-Demand</p>
+      </div>
+    </div>
+
+    <!-- ================= 1. SCREEN: LOGIN / AUTH ================= -->
+    <section id="view-phone" class="p-6 flex flex-col justify-between min-h-screen bg-white">
+      <div>
+        <div class="flex items-center justify-between mb-6 pt-2">
+          <div class="flex items-center gap-2">
+            <span class="bg-black text-white text-xs font-black px-2 py-1 tracking-tighter rounded">QB</span>
+            <span class="text-xs font-black tracking-widest uppercase">QuickBay</span>
+          </div>
+          <!-- Audio Toggle Button -->
+          <button onclick="toggleAudioMute()" id="soundToggleBtnAuth" class="px-2.5 py-1 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 rounded-full text-xs font-bold flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-volume-high text-emerald-600 text-[11px]"></i>
+            <span class="text-[10px]">Audio ON</span>
+          </button>
+        </div>
+
+        <h1 class="text-3xl font-extrabold text-black tracking-tight leading-snug">
+          Authorized car care,<br>minus dealer markup.
+        </h1>
+        <p class="text-xs text-neutral-500 mt-2">Book live certified garage bays with OEM spare box guarantee. Pay online via UPI or after service at the workshop.</p>
+
+        <div class="mt-8 space-y-4">
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Your Full Name</label>
+            <input type="text" id="inputName" placeholder="Enter your full name" required class="w-full mt-1.5 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black placeholder-neutral-400 focus:outline-none focus:border-black" />
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Email Address (For Tax Invoices)</label>
+            <input type="email" id="inputEmail" placeholder="you@example.com" required class="w-full mt-1.5 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black placeholder-neutral-400 focus:outline-none focus:border-black" />
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Mobile Number</label>
+            <div class="flex items-center gap-2 mt-1.5">
+              <div class="flex items-center gap-1.5 bg-neutral-100 border border-neutral-300 rounded-xl px-3 py-3.5 text-sm font-bold text-black">
+                <span>🇮🇳</span>
+                <span>+91</span>
+              </div>
+              <input type="tel" id="inputPhone" maxlength="10" placeholder="Enter 10-digit number" required class="flex-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black placeholder-neutral-400 focus:outline-none focus:border-black" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pb-6 pt-4 space-y-3">
+        <button onclick="signInWithGoogle()" id="googleSignInButton" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm tracking-wide hover:bg-neutral-800 transition flex items-center justify-center gap-3">
+          <i class="fa-brands fa-google text-base"></i><span>Continue with Google</span>
+        </button>
+        <div class="flex items-center gap-3"><span class="h-px bg-neutral-200 flex-1"></span><span class="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">Test mode</span><span class="h-px bg-neutral-200 flex-1"></span></div>
+        <button onclick="requestOTP()" class="w-full bg-neutral-100 text-neutral-700 border border-neutral-200 py-3 rounded-xl font-bold text-xs tracking-wide hover:bg-neutral-200 transition">Continue with demo profile</button>
+        <p class="text-[9px] text-neutral-400 text-center">Google sign-in uses Supabase Authentication. Demo access is for testing only.</p>
+      </div>
+    </section>
+
+    <!-- ================= 2. SCREEN: OTP VERIFICATION ================= -->
+    <section id="view-otp" class="hidden p-6 flex flex-col justify-between min-h-screen bg-white">
+      <div>
+        <button onclick="switchView('view-phone')" class="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center mb-6 mt-2">
+          <i class="fa-solid fa-arrow-left text-sm text-black"></i>
+        </button>
+        <h2 class="text-2xl font-extrabold text-black tracking-tight">Enter 4-digit code</h2>
+        <p class="text-xs text-neutral-500 mt-2">Code sent to <span id="displayPhone" class="font-bold text-black">+91 98765 43210</span> &amp; <span id="displayEmail" class="font-bold text-black">yogesh.a@example.com</span></p>
+
+        <div class="flex justify-between max-w-[280px] mt-8 gap-3">
+          <input type="text" maxlength="1" class="otp-box w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-xl text-2xl font-black text-center text-black focus:outline-none" />
+          <input type="text" maxlength="1" class="otp-box w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-xl text-2xl font-black text-center text-black focus:outline-none" />
+          <input type="text" maxlength="1" class="otp-box w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-xl text-2xl font-black text-center text-black focus:outline-none" />
+          <input type="text" maxlength="1" class="otp-box w-14 h-16 bg-neutral-100 border-2 border-neutral-300 focus:border-black rounded-xl text-2xl font-black text-center text-black focus:outline-none" />
+        </div>
+
+        <div class="mt-6 flex items-center justify-between text-xs">
+          <span class="text-neutral-400">Didn't receive code?</span>
+          <button class="font-bold text-black hover:underline" onclick="fillDemoOTP()">Resend (0:29)</button>
+        </div>
+
+        <div class="mt-8 p-3.5 bg-neutral-100 rounded-xl border border-neutral-200 flex justify-between items-center">
+          <span class="text-xs text-neutral-600 font-medium">Demo Simulator Code: <b class="text-black">8842</b></span>
+          <button onclick="fillDemoOTP()" class="text-xs font-bold bg-black text-white px-3 py-1.5 rounded-lg hover:bg-neutral-800">Auto-fill</button>
+        </div>
+      </div>
+
+      <div class="pb-6">
+        <button onclick="verifyOTP()" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm tracking-wide">
+          Verify &amp; Add Vehicle Details
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 3. SCREEN: VEHICLE REGISTRATION (LUXURY & ODOMETER) ================= -->
+    <section id="view-vehicle" class="hidden p-6 flex flex-col justify-between min-h-screen bg-white">
+      <div>
+        <div class="flex items-center justify-between pt-2">
+          <button onclick="switchView('view-dashboard')" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+          </button>
+          <span class="text-xs font-extrabold text-neutral-400 uppercase tracking-widest">Garage Profile</span>
+          <button onclick="soundSynth.playEngineRevSound()" title="Test Engine Rev Audio" class="w-9 h-9 rounded-full bg-amber-500/10 text-amber-600 border border-amber-300 flex items-center justify-center">
+            <i class="fa-solid fa-volume-high text-xs"></i>
+          </button>
+        </div>
+
+        <h2 class="text-2xl font-extrabold text-black tracking-tight mt-3">Select Vehicle &amp; Mileage</h2>
+        <p class="text-xs text-neutral-500 mt-1">Select from luxury or everyday models. Odometer wear determines oil viscosity &amp; brake service advisories.</p>
+
+        <form id="vehicleForm" class="mt-6 space-y-4" onsubmit="event.preventDefault(); saveVehicle();">
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">License Plate Number</label>
+            <div class="relative mt-1">
+              <input type="text" id="regNumber" value="TN 20 BK 7892" placeholder="TN 20 BK 7892" class="w-full uppercase tracking-wider pl-12 pr-4 py-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-extrabold text-black focus:outline-none focus:border-black" required />
+              <div class="absolute left-2.5 top-2.5 flex flex-col items-center bg-blue-800 text-white px-1.5 py-0.5 rounded text-[8px] font-bold leading-tight">
+                <span>🇮🇳</span>
+                <span>IND</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Odometer with live advisory -->
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Odometer Reading (KM)</label>
+              <span id="odometerAdvisoryPill" class="text-[9px] font-extrabold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">30k–40k Interval</span>
+            </div>
+            <div class="relative mt-1">
+              <input type="number" id="inputOdometer" value="38500" min="0" max="999999" oninput="checkOdometerMilestone()" placeholder="e.g. 38500" class="w-full p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-bold text-black focus:outline-none focus:border-black" required />
+              <span class="absolute right-3.5 top-3.5 text-xs font-bold text-neutral-400">KM</span>
+            </div>
+            <p id="odometerNotice" class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2.5 rounded-xl mt-2 font-medium">
+              <i class="fa-solid fa-triangle-exclamation mr-1"></i> At ~38,500 km, Brake Pads &amp; Synthetic Fluid Flush are recommended.
+            </p>
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Brand (Standard &amp; Luxury)</label>
+            <select id="carBrand" onchange="updateCarModels()" class="w-full mt-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black focus:outline-none focus:border-black" required>
+              <optgroup label="Luxury / Premium Marques">
+                <option value="BMW">BMW</option>
+                <option value="Mercedes-Benz">Mercedes-Benz</option>
+                <option value="Audi">Audi</option>
+                <option value="Volvo">Volvo</option>
+                <option value="Jaguar">Jaguar</option>
+                <option value="Land Rover">Land Rover</option>
+                <option value="Porsche">Porsche</option>
+              </optgroup>
+              <optgroup label="Popular &amp; Daily Brands">
+                <option value="Kia" selected>Kia</option>
+                <option value="Hyundai">Hyundai</option>
+                <option value="Maruti Suzuki">Maruti Suzuki</option>
+                <option value="Tata Motors">Tata Motors</option>
+                <option value="Toyota">Toyota</option>
+                <option value="Mahindra">Mahindra</option>
+                <option value="Honda">Honda</option>
+                <option value="Volkswagen">Volkswagen</option>
+                <option value="Škoda">Škoda</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Model</label>
+            <select id="carModel" class="w-full mt-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black focus:outline-none focus:border-black" required>
+              <!-- Populated by JS -->
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Model Year</label>
+              <select id="carYear" class="w-full mt-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black focus:outline-none focus:border-black" required>
+                <!-- Populated by JS -->
+              </select>
+            </div>
+            <div>
+              <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Fuel Type</label>
+              <select id="carFuel" class="w-full mt-1 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-sm font-semibold text-black focus:outline-none focus:border-black">
+                <option value="Petrol">Petrol</option>
+                <option value="Diesel" selected>Diesel</option>
+                <option value="CNG">CNG</option>
+                <option value="Electric">Electric (EV)</option>
+                <option value="Hybrid">Hybrid</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+
+      <div class="pb-6 pt-4">
+        <button onclick="saveVehicle()" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm tracking-wide hover:bg-neutral-800 transition">
+          Save &amp; View Certified Garages
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 4. SCREEN: DASHBOARD & WORKSHOP EXPLORER ================= -->
+    <section id="view-dashboard" class="hidden flex-1 flex flex-col bg-white">
+      
+      <!-- Sticky Location & Header Bar -->
+      <div class="sticky top-0 bg-white/95 backdrop-blur-md z-30 px-5 pt-3 pb-3 border-b border-neutral-100 flex items-center justify-between">
+        <div onclick="openCityModal()" class="cursor-pointer">
+          <p class="text-[9px] font-extrabold uppercase tracking-widest text-emerald-600 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>QuickBay Verified Network</span>
+          </p>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <i class="fa-solid fa-location-dot text-black text-xs"></i>
+            <span id="headerCityName" class="text-xs font-black text-black truncate max-w-[160px]">Tiruvallur, TN</span>
+            <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Header Audio Mute Toggle -->
+          <button onclick="toggleAudioMute()" id="soundToggleBtnHeader" title="Mute/Unmute Audio" class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-black border border-neutral-200">
+            <i class="fa-solid fa-volume-high text-xs text-emerald-600"></i>
+          </button>
+
+          <button onclick="openMapModal()" class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-black border border-neutral-200">
+            <i class="fa-solid fa-map text-xs"></i>
+          </button>
+          
+          <button onclick="switchView('view-vehicle')" class="px-2.5 py-1.5 bg-neutral-100 rounded-full text-xs font-extrabold flex items-center gap-1.5 border border-neutral-200">
+            <i class="fa-solid fa-car text-neutral-800 text-[10px]"></i>
+            <span id="badgeVehicleName">Carens</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Scrollable Dashboard Content -->
+      <div class="p-5 pb-28 space-y-5">
+        
+        <!-- Live Odometer Health Alert Banner -->
+        <div class="p-4 rounded-2xl bg-neutral-900 text-white flex items-center justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[9px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-2 py-0.5 rounded">Odometer Log</span>
+              <span id="dashOdoText" class="text-xs font-mono font-bold text-neutral-300">38,500 KM</span>
+            </div>
+            <p class="text-xs font-bold text-white mt-1">Recommended: Brake &amp; Fluid Inspection</p>
+            <p class="text-[10px] text-neutral-400">Keep warranty active with OEM genuine fluid checks.</p>
+          </div>
+          <button onclick="soundSynth.playEngineRevSound()" title="Play Engine Sound" class="w-9 h-9 rounded-full bg-neutral-800 flex items-center justify-center text-amber-400 shrink-0">
+            <i class="fa-solid fa-gas-pump text-xs"></i>
+          </button>
+        </div>
+
+        <!-- Live nearby service-centre directory -->
+        <div class="p-3.5 rounded-2xl border border-neutral-200 bg-neutral-50 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center text-sm shrink-0">
+              <i class="fa-solid fa-database"></i>
+            </div>
+            <div>
+              <p class="text-xs font-extrabold text-black">Nearby Service-Centre Directory</p>
+              <p class="text-[10px] text-neutral-500">Live mapped listings with available phone numbers &amp; directions</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ================= 25 MASTER CAR PROBLEMS DIAGNOSTIC SELECTOR ================= -->
+        <div class="rounded-2xl border-2 border-neutral-900 bg-neutral-50 p-4">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+                <span class="text-[10px] font-black uppercase tracking-wider text-red-600">Smart Symptom Diagnostics</span>
+              </div>
+              <h3 class="text-sm font-extrabold text-black mt-0.5">25 Primary Car Problems</h3>
+              <p class="text-[10px] text-neutral-500">Select any symptoms occurring in your car to dispatch matched specialist technicians.</p>
+            </div>
+            <span id="diagnosedCountBadge" class="text-[10px] font-extrabold bg-black text-white px-2 py-0.5 rounded-full">0 Added</span>
+          </div>
+
+          <!-- Problem Categories Tabs -->
+          <div class="flex gap-1.5 overflow-x-auto no-scrollbar mt-3 pb-1" id="problemCategoryPills">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Master Problems List for Active Category -->
+          <div id="masterProblemsList" class="mt-3 space-y-2 max-h-56 overflow-y-auto pr-1">
+            <!-- Dynamically populated by JS -->
+          </div>
+        </div>
+
+        <!-- Standard Maintenance Service Cards -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-black">Standard Maintenance Care</h3>
+              <p class="text-[10px] text-neutral-400">Fixed-price packages with genuine spare parts</p>
+            </div>
+            <span id="serviceCountBadge" class="text-[10px] font-extrabold bg-black text-white px-2 py-0.5 rounded-full">1 Selected</span>
+          </div>
+
+          <div id="serviceCatalogGrid" class="grid grid-cols-1 gap-2.5">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Live Search Bar -->
+        <div class="relative pt-2">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-5 text-neutral-400 text-xs"></i>
+          <input type="text" id="searchInput" oninput="filterWorkshops()" placeholder="Search service centres, garages, or areas..." class="w-full bg-neutral-100 border border-neutral-200 rounded-xl pl-9 pr-4 py-3 text-xs font-medium text-black placeholder-neutral-400 focus:outline-none focus:border-black" />
+        </div>
+
+        <!-- Live device location and distance-based nearby workshop sorting -->
+        <button type="button" onclick="useCurrentGpsLocation()" id="liveLocationButton" class="w-full p-3.5 rounded-xl border border-neutral-300 bg-white flex items-center justify-between hover:border-black transition">
+          <span class="flex items-center gap-3">
+            <span class="w-9 h-9 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center"><i class="fa-solid fa-location-crosshairs"></i></span>
+            <span class="text-left"><span class="block text-xs font-extrabold text-black">Find service centres near me</span><span id="liveLocationStatus" class="block text-[10px] text-neutral-500 mt-0.5">Use your device location to sort nearby centres</span></span>
+          </span>
+          <i class="fa-solid fa-chevron-right text-xs text-neutral-400"></i>
+        </button>
+        <p class="text-[9px] text-neutral-400 mt-1.5">Live directory powered by OpenStreetMap contributors. Listing coverage and contact details depend on community mapping.</p>
+
+        <!-- Filter Pills -->
+        <div class="flex gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <button onclick="setFilter('all')" id="pill-all" class="filter-pill px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-black text-white shrink-0">All Workshops</button>
+          <button onclick="setFilter('5km')" id="pill-5km" class="filter-pill px-3.5 py-1.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 shrink-0">Within 5 KM</button>
+          <button onclick="setFilter('oem')" id="pill-oem" class="filter-pill px-3.5 py-1.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 shrink-0">OEM Certified Only</button>
+          <button onclick="setFilter('top')" id="pill-top" class="filter-pill px-3.5 py-1.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 shrink-0">★ 4.8+ Rated</button>
+        </div>
+
+        <!-- Localized Workshops Feed -->
+        <div>
+          <div class="flex justify-between items-center mb-3">
+            <div>
+              <h3 class="text-xs font-black uppercase tracking-wider text-black">Certified Partner Garages</h3>
+              <p class="text-[10px] text-neutral-400" id="nearbyWorkshopsSubtitle">Demo preview • tap “Find service centres near me” to load real nearby listings</p>
+            </div>
+            <span class="text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-1 rounded">Live Bays Available</span>
+          </div>
+
+          <div id="workshopsFeed" class="space-y-3">
+            <!-- Dynamically populated via JS -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= 5. SCREEN: CHECKOUT & PAYMENT METHOD CHOICE ================= -->
+    <section id="view-checkout" class="hidden flex-1 flex flex-col justify-between bg-white p-6 pb-28">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <button onclick="switchView('view-dashboard')" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+          </button>
+          <h3 class="text-xs font-black uppercase tracking-wider">Bay Reservation &amp; Billing</h3>
+          <div class="w-9"></div>
+        </div>
+
+        <!-- Allocated Workshop Card -->
+        <div class="mt-4 p-4 rounded-2xl bg-neutral-50 border border-neutral-200">
+          <div class="flex justify-between items-start">
+            <div>
+              <span class="text-[9px] font-black uppercase bg-black text-white px-2 py-0.5 rounded">Allocated Garage</span>
+              <h4 id="coWorkshopTitle" class="text-base font-extrabold text-black mt-1.5">Splash Automotive Works</h4>
+              <p id="coWorkshopMeta" class="text-xs text-neutral-500">PWD Road, Manavalanagar • 2.1 km away</p>
+            </div>
+            <span id="coWorkshopRating" class="text-xs font-black bg-neutral-200 text-neutral-800 px-2 py-0.5 rounded">★ 4.9</span>
+          </div>
+        </div>
+
+        <!-- Vehicle & Odometer Tag -->
+        <div class="mt-3 p-3 bg-neutral-100 rounded-xl flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <i class="fa-solid fa-car text-black text-base"></i>
+            <div>
+              <p id="coCarDetails" class="text-xs font-bold text-black">Kia Carens (2023)</p>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span id="coPlateNumber" class="text-[10px] font-mono font-bold text-neutral-700 bg-white px-1.5 py-0.5 rounded border border-neutral-200">TN 20 BK 7892</span>
+                <span id="coOdometerKm" class="text-[10px] font-bold text-neutral-500">38,500 km</span>
+              </div>
+            </div>
+          </div>
+          <button onclick="switchView('view-vehicle')" class="text-[11px] font-bold text-neutral-600 underline">Edit</button>
+        </div>
+
+        <!-- Combined Services & Diagnosed Problems List -->
+        <div class="mt-4">
+          <p class="text-[11px] font-bold uppercase tracking-wider text-neutral-500 mb-2">Itemized Services &amp; Problem Repairs</p>
+          <div id="coServicesList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Service Delivery Mode -->
+        <div class="mt-4">
+          <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Delivery Preference</label>
+          <div class="grid grid-cols-2 gap-2 mt-1.5">
+            <label onclick="setDeliveryMode('self')" id="opt-mode-self" class="p-3 border-2 border-black rounded-xl flex flex-col justify-between cursor-pointer bg-neutral-50">
+              <div class="flex items-center justify-between">
+                <i class="fa-solid fa-warehouse text-xs"></i>
+                <i class="fa-solid fa-circle-check text-black text-xs"></i>
+              </div>
+              <p class="text-xs font-bold mt-2">Self Drive</p>
+              <p class="text-[10px] text-neutral-500">Direct bay intake</p>
+            </label>
+            <label onclick="setDeliveryMode('valet')" id="opt-mode-valet" class="p-3 border border-neutral-200 rounded-xl flex flex-col justify-between cursor-pointer">
+              <div class="flex items-center justify-between">
+                <i class="fa-solid fa-truck-pickup text-xs text-neutral-400"></i>
+                <span class="text-[9px] font-bold bg-neutral-100 text-neutral-700 px-1.5 py-0.5 rounded">+₹199</span>
+              </div>
+              <p class="text-xs font-bold mt-2">Doorstep Valet</p>
+              <p class="text-[10px] text-neutral-500">Insured driver pickup</p>
+            </label>
+          </div>
+        </div>
+
+        <!-- ================= PAYMENT METHOD: PAY AFTER SERVICE vs UPI ================= -->
+        <div class="mt-5 pt-3">
+          <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block mb-2">Select Payment Method</label>
+          
+          <div class="grid grid-cols-2 gap-2">
+            <!-- 1. Pay After Service at Workshop -->
+            <div onclick="selectPaymentOption('after_service')" id="pay-opt-after" class="p-3 rounded-xl border-2 border-black bg-neutral-50 cursor-pointer flex flex-col justify-between">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-black uppercase bg-emerald-600 text-white px-1.5 py-0.5 rounded">Zero Advance</span>
+                <i class="fa-solid fa-circle-check text-black text-sm" id="pay-check-after"></i>
+              </div>
+              <p class="text-xs font-extrabold text-black mt-2">Pay After Service</p>
+              <p class="text-[10px] text-neutral-500">Pay at workshop counter after post-service inspection</p>
+            </div>
+
+            <!-- 2. Instant UPI Online -->
+            <div onclick="selectPaymentOption('upi_online')" id="pay-opt-upi" class="p-3 rounded-xl border border-neutral-200 bg-white cursor-pointer flex flex-col justify-between">
+              <div class="flex items-center justify-between">
+                <span class="text-[9px] font-black uppercase bg-neutral-200 text-neutral-700 px-1.5 py-0.5 rounded">Instant Online</span>
+                <i class="fa-solid fa-circle-check text-neutral-300 text-sm hidden" id="pay-check-upi"></i>
+              </div>
+              <p class="text-xs font-extrabold text-black mt-2">Pay via UPI</p>
+              <p class="text-[10px] text-neutral-500">Google Pay, PhonePe, Paytm, BHIM, QR code</p>
+            </div>
+          </div>
+
+          <!-- Secondary UPI Sub-Options (if UPI is active) -->
+          <div id="upiSubOptionsArea" class="hidden mt-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200 space-y-2">
+            <div class="grid grid-cols-4 gap-1.5">
+              <button type="button" onclick="selectUpiApp('gpay')" id="upi-btn-gpay" class="upi-option p-2 border-2 border-black rounded-lg flex flex-col items-center justify-center bg-white">
+                <span class="text-xs font-black text-blue-600">GPay</span>
+              </button>
+              <button type="button" onclick="selectUpiApp('phonepe')" id="upi-btn-phonepe" class="upi-option p-2 border border-neutral-200 rounded-lg flex flex-col items-center justify-center bg-white">
+                <span class="text-xs font-black text-purple-700">PhonePe</span>
+              </button>
+              <button type="button" onclick="selectUpiApp('paytm')" id="upi-btn-paytm" class="upi-option p-2 border border-neutral-200 rounded-lg flex flex-col items-center justify-center bg-white">
+                <span class="text-xs font-black text-sky-500">Paytm</span>
+              </button>
+              <button type="button" onclick="selectUpiApp('qr')" id="upi-btn-qr" class="upi-option p-2 border border-neutral-200 rounded-lg flex flex-col items-center justify-center bg-white">
+                <i class="fa-solid fa-qrcode text-xs text-neutral-800"></i>
+              </button>
+            </div>
+            <div class="relative mt-2">
+              <input type="text" id="customUpiId" placeholder="Or enter VPA (mobile@upi)" value="9876543210@okaxis" class="w-full p-2.5 bg-white border border-neutral-300 rounded-lg text-xs font-semibold" />
+              <button onclick="verifyVpa()" class="absolute right-1.5 top-1.5 px-2 py-1 bg-black text-white text-[9px] font-bold rounded">Verify</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Transparent Bill Breakdown (With 18% GST) -->
+        <div class="mt-5 pt-4 border-t border-neutral-200 space-y-2 text-xs">
+          <div class="flex justify-between text-neutral-600">
+            <span>Genuine OEM Spare Parts &amp; Consumables</span>
+            <span id="coPartsCost" class="font-semibold text-black">₹0</span>
+          </div>
+          <div class="flex justify-between text-neutral-600">
+            <span>Certified Bay Diagnostic &amp; Labor</span>
+            <span id="coLaborCost" class="font-semibold text-black">₹0</span>
+          </div>
+          <div class="flex justify-between text-neutral-600">
+            <span>Valet Delivery / Pickup</span>
+            <span id="coValetCost" class="font-semibold text-black">₹0</span>
+          </div>
+          <div class="flex justify-between text-neutral-600">
+            <span>GST (18% Statutory HSN Tax)</span>
+            <span id="coGstCost" class="font-semibold text-black">₹0</span>
+          </div>
+          <div class="flex justify-between text-neutral-500 text-[11px]">
+            <span>Dealership Estimate</span>
+            <span id="coDealerCost" class="line-through text-neutral-400">₹0</span>
+          </div>
+          <div class="flex justify-between font-extrabold text-sm pt-2 border-t border-neutral-200">
+            <span id="coPayableLabel">Payable Post-Service</span>
+            <span id="coTotalPayable" class="text-black font-black text-base">₹0</span>
+          </div>
+          <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2">
+            <i class="fa-solid fa-shield-check text-emerald-600 text-xs"></i>
+            <span id="coSavingsText" class="text-[11px] font-bold text-emerald-800">You save approx 38% vs authorized dealerships</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6">
+        <button onclick="confirmBayBooking()" id="confirmBookingBtn" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm tracking-wide flex items-center justify-center gap-2 hover:bg-neutral-800 transition">
+          <i class="fa-solid fa-circle-check text-xs text-emerald-400"></i>
+          <span id="confirmBookingBtnLabel">Confirm Reservation (Pay at Workshop)</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 6. SCREEN: LIVE BAY STATUS & CCTV STREAM ================= -->
+    <section id="view-tracking" class="hidden flex-1 flex flex-col justify-between bg-white p-5 pb-28">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <button onclick="switchView('view-dashboard')" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-house text-xs"></i>
+          </button>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+            <h3 class="text-xs font-black uppercase tracking-wider">Live Bay CCTV &amp; Progress</h3>
+          </div>
+          <button onclick="viewGeneratedInvoice()" title="View Tax Bill" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center text-black">
+            <i class="fa-solid fa-receipt text-xs"></i>
+          </button>
+        </div>
+
+        <!-- ================= LIVE CCTV FEED VIEWER ================= -->
+        <div class="mt-3 rounded-2xl overflow-hidden bg-black text-white shadow-xl border border-neutral-800">
+          <!-- CCTV Top Bar -->
+          <div class="px-3 py-2 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between text-[10px]">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-600/30 text-red-400 border border-red-500/40 font-mono font-bold animate-pulse">
+                <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> REC
+              </span>
+              <span id="cctvCamLabel" class="font-mono text-neutral-300">CAM 01: Overhead Hydraulic Lift</span>
+            </div>
+            <span id="cctvTimestamp" class="font-mono text-neutral-400">14-10-2026 21:15:32</span>
+          </div>
+
+          <!-- Video Canvas / Stream Canvas Simulation -->
+          <div class="relative w-full h-48 bg-neutral-950 flex items-center justify-center overflow-hidden">
+            <canvas id="cctvCanvas" width="400" height="200" class="w-full h-full object-cover"></canvas>
+            <div class="cctv-overlay absolute inset-0"></div>
+            
+            <!-- Snapshot Tool Button -->
+            <button onclick="captureCctvSnapshot()" title="Capture High-Res Photo" class="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-black text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg backdrop-blur-sm transition">
+              <i class="fa-solid fa-camera text-[11px]"></i>
+              <span class="text-[10px]">Take Snapshot</span>
+            </button>
+          </div>
+
+          <!-- CCTV Multi-Camera Switcher Buttons -->
+          <div class="p-2 bg-neutral-900 grid grid-cols-3 gap-1 text-[10px] border-t border-neutral-800">
+            <button onclick="switchCctvCam(1)" id="cctv-btn-1" class="py-1.5 rounded bg-neutral-800 text-white font-bold border border-white/20">Cam 1: Lift Bay</button>
+            <button onclick="switchCctvCam(2)" id="cctv-btn-2" class="py-1.5 rounded bg-neutral-950 text-neutral-400 font-bold border border-transparent">Cam 2: Engine</button>
+            <button onclick="switchCctvCam(3)" id="cctv-btn-3" class="py-1.5 rounded bg-neutral-950 text-neutral-400 font-bold border border-transparent">Cam 3: Underbody</button>
+          </div>
+        </div>
+
+        <!-- Captured Snapshot Preview Container -->
+        <div id="snapshotPreviewCard" class="hidden mt-3 p-2.5 bg-neutral-100 rounded-xl border border-neutral-200 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div id="snapshotThumbContainer" class="w-12 h-8 bg-black rounded overflow-hidden"></div>
+            <div>
+              <p class="text-[11px] font-bold text-black">Live Bay Photo Captured</p>
+              <p class="text-[9px] text-neutral-500 font-mono" id="snapshotTimestampText">Just now • Bay #03</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-bold bg-white px-2 py-1 rounded border border-neutral-200 text-neutral-700">Saved to Log</span>
+        </div>
+
+        <!-- Active Booking Summary Card -->
+        <div class="mt-4 p-4 rounded-2xl bg-neutral-900 text-white">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-[10px] font-extrabold tracking-widest uppercase text-neutral-400">Reservation Reference</p>
+              <h4 id="trackBookingId" class="text-xl font-black tracking-wider mt-0.5">QB-2026-89410</h4>
+            </div>
+            <span id="trackStatusBadge" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Stage 1 Active</span>
+          </div>
+
+          <div class="mt-3 pt-3 border-t border-neutral-800 flex justify-between items-center text-xs">
+            <div>
+              <p id="trackWorkshopName" class="font-bold text-white">Splash Automotive Works</p>
+              <p id="trackCarName" class="text-neutral-400 text-[11px]">Kia Carens • TN 20 BK 7892 (38,500 km)</p>
+            </div>
+            <a href="tel:+919876543210" class="w-8 h-8 rounded-full bg-white text-black flex items-center justify-center">
+              <i class="fa-solid fa-phone text-xs"></i>
+            </a>
+          </div>
+
+          <div class="mt-3 pt-2 border-t border-neutral-800 grid grid-cols-3 gap-2 text-center text-[10px]">
+            <div>
+              <span class="text-neutral-500 block">Assigned Bay</span>
+              <b class="text-white font-mono" id="trackBayNum">Bay #03</b>
+            </div>
+            <div>
+              <span class="text-neutral-500 block">Lead Tech</span>
+              <b class="text-white" id="trackTechName">V. Senthil Kumar</b>
+            </div>
+            <div>
+              <span class="text-neutral-500 block">Payment Mode</span>
+              <b class="text-emerald-400 font-bold" id="trackPaymentSummary">At Workshop</b>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-Stage Live Timeline -->
+        <div class="mt-5 space-y-4 px-1" id="timelineContainer">
+          <!-- Populated by renderTrackingPipeline() -->
+        </div>
+
+        <!-- Security PIN and Pipeline Simulation Controller -->
+        <div class="mt-5 p-3.5 bg-neutral-100 rounded-xl flex items-center justify-between">
+          <div>
+            <p class="text-[10px] font-bold uppercase tracking-wider text-neutral-500">Security Gate PIN</p>
+            <p id="trackGatePin" class="text-lg font-black tracking-widest text-black">4092</p>
+          </div>
+          <button onclick="simulateAdvanceStage()" class="px-3 py-2 bg-black text-white text-[11px] font-bold rounded-lg flex items-center gap-1.5 hover:bg-neutral-800">
+            <i class="fa-solid fa-forward-step text-[10px]"></i>
+            <span>Advance Stage</span>
+          </button>
+        </div>
+
+        <!-- View Bill CTA -->
+        <div class="mt-3">
+          <button onclick="viewGeneratedInvoice()" class="w-full bg-neutral-100 border border-neutral-300 text-black py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-neutral-200 transition">
+            <i class="fa-solid fa-receipt text-xs"></i>
+            <span>View &amp; Print Official Tax Invoice</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-6">
+        <button onclick="switchView('view-dashboard')" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-xs tracking-wide">
+          Return to Workshops
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 7. SCREEN: TAX INVOICE / BILL VIEW ================= -->
+    <section id="view-invoice" class="hidden flex-1 flex flex-col justify-between bg-white p-5 pb-28">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100 no-print">
+          <button onclick="switchView('view-tracking')" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+          </button>
+          <h3 class="text-xs font-black uppercase tracking-wider">GST Tax Invoice</h3>
+          <button onclick="window.print()" class="px-3 py-1 bg-black text-white text-xs font-bold rounded-lg flex items-center gap-1">
+            <i class="fa-solid fa-print text-[10px]"></i>
+            <span>Print PDF</span>
+          </button>
+        </div>
+
+        <!-- Printable Bill Content -->
+        <div id="printableInvoiceArea" class="mt-4 p-4 border border-neutral-300 bg-white space-y-4 text-xs text-neutral-800">
+          <!-- Header -->
+          <div class="flex justify-between items-start border-b border-neutral-200 pb-3">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="bg-black text-white text-[11px] font-black px-1.5 py-0.5 rounded">QB</span>
+                <span class="font-extrabold text-sm text-black">QuickBay Technologies Pvt Ltd</span>
+              </div>
+              <p class="text-[10px] text-neutral-500 mt-1">Authorized Automotive Service Platform</p>
+              <p class="text-[10px] text-neutral-500 font-mono">GSTIN: 33AAACQ9812M1Z5</p>
+            </div>
+            <div class="text-right">
+              <span id="invPaymentStatusBadge" class="text-[9px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded">PAY AT WORKSHOP</span>
+              <p class="text-[10px] font-mono font-bold text-black mt-1" id="invNumber">QB-INV-2026-9812</p>
+              <p class="text-[10px] text-neutral-500" id="invDate">Oct 14, 2026</p>
+            </div>
+          </div>
+
+          <!-- Billed By & Billed To -->
+          <div class="grid grid-cols-2 gap-3 text-[11px]">
+            <div>
+              <span class="text-[9px] font-black uppercase text-neutral-400 block">Service Workshop</span>
+              <b class="text-black" id="invShopName">Splash Automotive Works</b>
+              <p class="text-neutral-500 text-[10px] mt-0.5" id="invShopAddr">PWD Road, Manavalanagar, TN</p>
+              <p class="text-neutral-500 text-[10px]">Contact: +91 44 2766 4920</p>
+            </div>
+            <div>
+              <span class="text-[9px] font-black uppercase text-neutral-400 block">Customer Information</span>
+              <b class="text-black" id="invCustName">Yogesh A</b>
+              <p class="text-neutral-500 text-[10px] mt-0.5" id="invCustEmail">yogesh.a@example.com</p>
+              <p class="text-neutral-500 text-[10px]" id="invCustPhone">+91 98765 43210</p>
+            </div>
+          </div>
+
+          <!-- Vehicle Specs on Bill -->
+          <div class="p-2.5 bg-neutral-100 rounded-xl grid grid-cols-3 gap-2 text-center text-[10px]">
+            <div>
+              <span class="text-neutral-500 block">Vehicle Model</span>
+              <b class="text-black" id="invCarModel">Kia Carens (2023)</b>
+            </div>
+            <div>
+              <span class="text-neutral-500 block">Registration Plate</span>
+              <b class="text-black font-mono" id="invCarPlate">TN 20 BK 7892</b>
+            </div>
+            <div>
+              <span class="text-neutral-500 block">Odometer Log</span>
+              <b class="text-black" id="invCarOdo">38,500 KM</b>
+            </div>
+          </div>
+
+          <!-- Itemized Table (Includes 25 Problems & Standard Services) -->
+          <div>
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="border-b border-neutral-300 text-[10px] font-extrabold uppercase text-neutral-500">
+                  <th class="py-1">Description</th>
+                  <th class="py-1 text-center">HSN</th>
+                  <th class="py-1 text-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody id="invTableBody" class="divide-y divide-neutral-100 text-[11px]">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Totals Calculation -->
+          <div class="border-t border-neutral-200 pt-2 space-y-1 text-[11px]">
+            <div class="flex justify-between text-neutral-600">
+              <span>Subtotal (Parts + Bay Labor)</span>
+              <span id="invSubtotal">₹0</span>
+            </div>
+            <div class="flex justify-between text-neutral-600">
+              <span>CGST (9%)</span>
+              <span id="invCgst">₹0</span>
+            </div>
+            <div class="flex justify-between text-neutral-600">
+              <span>SGST (9%)</span>
+              <span id="invSgst">₹0</span>
+            </div>
+            <div class="flex justify-between font-black text-sm text-black pt-1 border-t border-neutral-200">
+              <span>Total Invoice Amount</span>
+              <span id="invGrandTotal">₹0</span>
+            </div>
+          </div>
+
+          <!-- Settlement Method Note -->
+          <div class="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl text-[10px] space-y-1">
+            <div class="flex justify-between">
+              <span class="text-neutral-500">Settlement Method:</span>
+              <span class="font-bold text-black" id="invSettlementDesc">Payable at Workshop (Post-Inspection)</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-neutral-500">Transaction Reference:</span>
+              <span class="font-mono font-bold text-black" id="invUpiUtr">PENDING_AT_BAY</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-neutral-500">Warranty Protection:</span>
+              <span class="text-emerald-700 font-semibold">10,000 KM / 6 Months QuickBay Warranty</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-6 no-print">
+        <button onclick="switchView('view-dashboard')" class="w-full bg-black text-white py-3.5 rounded-xl font-bold text-xs tracking-wide">
+          Back to Garage Dashboard
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 8. SCREEN: EDIT USER & CAR PROFILE ================= -->
+    <section id="view-profile" class="hidden flex-1 flex flex-col justify-between bg-white p-6 pb-28">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <button onclick="switchView('view-dashboard')" class="w-9 h-9 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-arrow-left text-xs"></i>
+          </button>
+          <h3 class="text-xs font-black uppercase tracking-wider">Account &amp; Vehicle</h3>
+          <div class="w-9"></div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-3">
+          <div class="w-14 h-14 rounded-2xl bg-black text-white flex items-center justify-center text-xl font-extrabold">
+            <span id="profAvatarLetter">Y</span>
+          </div>
+          <div>
+            <h4 id="profDisplayName" class="text-base font-extrabold text-black">Yogesh A</h4>
+            <p id="profDisplayEmail" class="text-xs text-neutral-500">yogesh.a@example.com</p>
+            <span class="inline-block text-[10px] font-bold bg-neutral-100 text-neutral-700 px-2 py-0.5 rounded mt-1">QuickBay Prime User</span>
+          </div>
+        </div>
+
+        <div class="mt-6 space-y-4">
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Full Name</label>
+            <input type="text" id="profNameInput" class="w-full mt-1.5 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-bold text-black focus:outline-none focus:border-black" />
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Registered Email</label>
+            <input type="email" id="profEmailInput" class="w-full mt-1.5 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-bold text-black focus:outline-none focus:border-black" />
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Registered Phone</label>
+            <input type="tel" id="profPhoneInput" class="w-full mt-1.5 p-3.5 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-bold text-black focus:outline-none focus:border-black" />
+          </div>
+
+          <div>
+            <label class="text-[11px] font-bold uppercase tracking-wider text-neutral-500">Audio Feedback Setting</label>
+            <div class="flex items-center justify-between mt-1.5 p-3 bg-neutral-100 rounded-xl border border-neutral-200">
+              <span class="text-xs font-semibold text-neutral-700">UI Synthesizer Sounds &amp; Shutter</span>
+              <button onclick="toggleAudioMute()" id="soundToggleBtnProf" class="px-3 py-1 bg-black text-white text-xs font-bold rounded-lg">
+                Audio ON
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Savings Meter -->
+        <div class="mt-6 p-4 rounded-2xl bg-neutral-50 border border-neutral-200">
+          <p class="text-[10px] font-black uppercase text-neutral-400">Total QuickBay Lifetime Savings</p>
+          <div class="flex items-center justify-between mt-1">
+            <h4 class="text-xl font-black text-black">₹8,490 Saved</h4>
+            <span class="text-xs font-extrabold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">3 Services Done</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-2 mt-6">
+        <button onclick="saveUserProfile()" class="w-full bg-black text-white py-4 rounded-xl font-bold text-sm tracking-wide">
+          Save Profile Updates
+        </button>
+      </div>
+    </section>
+
+    <!-- ================= 9. MODAL: CITY SELECTOR ================= -->
+    <div id="cityModal" class="hidden fixed inset-0 z-50 bg-black/70 flex flex-col items-center justify-end">      <div class="w-full max-w-md max-h-[80vh] bg-white rounded-t-3xl flex flex-col overflow-hidden shadow-2xl p-5">
+        <div class="flex items-center justify-between pb-3 border-b border-neutral-100">
+          <div>
+            <h4 class="text-sm font-extrabold text-black">Select Your City / Perimeter</h4>
+            <p class="text-[10px] text-neutral-500">Garages are geo-sorted from your chosen region</p>
+          </div>
+          <button onclick="closeCityModal()" class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <div class="py-3">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-3.5 text-neutral-400 text-xs"></i>
+            <input type="text" id="citySearchBox" oninput="filterCityList()" placeholder="Type city or area name..." class="w-full bg-neutral-100 border border-neutral-200 rounded-xl pl-9 pr-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-black" />
+          </div>
+        </div>
+
+        <div id="cityListContainer" class="flex-1 overflow-y-auto space-y-1.5 py-1">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="pt-3 border-t border-neutral-100">
+          <button onclick="useCurrentGpsLocation()" class="w-full py-3 bg-neutral-100 border border-neutral-300 rounded-xl text-xs font-bold text-black flex items-center justify-center gap-2 hover:bg-neutral-200">
+            <i class="fa-solid fa-crosshairs text-emerald-600"></i>
+            <span>Use My Exact GPS Location</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 10. MODAL: INTERACTIVE LEAFLET MAP ================= -->
+    <div id="mapModal" class="hidden fixed inset-0 z-50 bg-black/70 flex flex-col items-center justify-end">
+      <div class="w-full max-w-md h-[85vh] bg-white rounded-t-3xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="p-4 border-b border-neutral-100 flex items-center justify-between">
+          <div>
+            <h4 class="text-sm font-extrabold text-black" id="mapModalTitle">Certified Garage Map</h4>
+            <p class="text-[10px] text-neutral-500">Live bay pins and OEM certifications near you</p>
+          </div>
+          <button onclick="closeMapModal()" class="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <div id="leafletMap" class="flex-1 w-full bg-neutral-200"></div>
+
+        <div class="p-3 bg-white border-t border-neutral-100 flex items-center justify-between text-xs">
+          <span class="text-neutral-500 text-[11px]">Tap any garage pin to reserve a slot</span>
+          <button onclick="closeMapModal()" class="px-4 py-2 bg-black text-white font-bold rounded-lg text-xs">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 11. MODAL: DYNAMIC UPI QR SCANNER ================= -->
+    <div id="upiQrModal" class="hidden fixed inset-0 z-50 bg-black/70 flex flex-col items-center justify-center p-4">
+      <div class="w-full max-w-xs bg-white rounded-3xl p-5 shadow-2xl text-center space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-neutral-100">
+          <span class="text-xs font-black uppercase tracking-wider text-black">Scan UPI QR</span>
+          <button onclick="closeUpiQrModal()" class="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+
+        <div class="p-3 bg-neutral-50 rounded-2xl border border-neutral-200 flex flex-col items-center">
+          <svg class="w-44 h-44" viewBox="0 0 100 100">
+            <rect width="100" height="100" fill="#ffffff" rx="6"/>
+            <rect x="8" y="8" width="24" height="24" fill="#000000" rx="3"/>
+            <rect x="12" y="12" width="16" height="16" fill="#ffffff" rx="2"/>
+            <rect x="16" y="16" width="8" height="8" fill="#000000" rx="1"/>
+            <rect x="68" y="8" width="24" height="24" fill="#000000" rx="3"/>
+            <rect x="72" y="12" width="16" height="16" fill="#ffffff" rx="2"/>
+            <rect x="76" y="16" width="8" height="8" fill="#000000" rx="1"/>
+            <rect x="8" y="68" width="24" height="24" fill="#000000" rx="3"/>
+            <rect x="12" y="72" width="16" height="16" fill="#ffffff" rx="2"/>
+            <rect x="16" y="76" width="8" height="8" fill="#000000" rx="1"/>
+            <rect x="36" y="8" width="4" height="4" fill="#000"/>
+            <rect x="44" y="8" width="4" height="4" fill="#000"/>
+            <rect x="52" y="8" width="4" height="4" fill="#000"/>
+            <rect x="60" y="8" width="4" height="4" fill="#000"/>
+            <rect x="36" y="16" width="4" height="4" fill="#000"/>
+            <rect x="48" y="16" width="4" height="4" fill="#000"/>
+            <rect x="56" y="16" width="4" height="4" fill="#000"/>
+            <rect x="36" y="24" width="4" height="4" fill="#000"/>
+            <rect x="44" y="24" width="4" height="4" fill="#000"/>
+            <rect x="60" y="24" width="4" height="4" fill="#000"/>
+            <rect x="8" y="36" width="4" height="4" fill="#000"/>
+            <rect x="16" y="36" width="4" height="4" fill="#000"/>
+            <rect x="24" y="36" width="4" height="4" fill="#000"/>
+            <rect x="44" y="36" width="4" height="4" fill="#000"/>
+            <rect x="56" y="36" width="4" height="4" fill="#000"/>
+            <rect x="68" y="36" width="4" height="4" fill="#000"/>
+            <rect x="88" y="36" width="4" height="4" fill="#000"/>
+            <rect x="12" y="44" width="4" height="4" fill="#000"/>
+            <rect x="40" y="44" width="8" height="8" fill="#000" rx="1"/>
+            <rect x="60" y="44" width="4" height="4" fill="#000"/>
+            <rect x="84" y="44" width="4" height="4" fill="#000"/>
+            <rect x="8" y="52" width="4" height="4" fill="#000"/>
+            <rect x="20" y="52" width="4" height="4" fill="#000"/>
+            <rect x="32" y="52" width="4" height="4" fill="#000"/>
+            <rect x="64" y="52" width="4" height="4" fill="#000"/>
+            <rect x="88" y="52" width="4" height="4" fill="#000"/>
+            <rect x="36" y="60" width="4" height="4" fill="#000"/>
+            <rect x="48" y="60" width="4" height="4" fill="#000"/>
+            <rect x="60" y="60" width="4" height="4" fill="#000"/>
+            <rect x="76" y="60" width="4" height="4" fill="#000"/>
+            <rect x="36" y="68" width="4" height="4" fill="#000"/>
+            <rect x="44" y="68" width="4" height="4" fill="#000"/>
+            <rect x="56" y="68" width="4" height="4" fill="#000"/>
+            <rect x="72" y="68" width="4" height="4" fill="#000"/>
+            <rect x="84" y="68" width="4" height="4" fill="#000"/>
+            <rect x="36" y="76" width="4" height="4" fill="#000"/>
+            <rect x="52" y="76" width="4" height="4" fill="#000"/>
+            <rect x="64" y="76" width="4" height="4" fill="#000"/>
+            <rect x="80" y="76" width="4" height="4" fill="#000"/>
+            <rect x="44" y="84" width="4" height="4" fill="#000"/>
+            <rect x="60" y="84" width="4" height="4" fill="#000"/>
+            <rect x="76" y="84" width="4" height="4" fill="#000"/>
+            <rect x="88" y="84" width="4" height="4" fill="#000"/>
+          </svg>
+          <span class="text-[10px] font-mono text-neutral-500 mt-2">quickbay.oem@icici</span>
+          <span id="qrPayableAmount" class="text-sm font-black text-black">₹2,699</span>
+        </div>
+
+        <p class="text-[11px] text-neutral-500">Scan using any UPI App (GPay, PhonePe, Paytm, BHIM) to settle reservation.</p>
+
+        <button onclick="completeQrPayment()" class="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs hover:bg-emerald-700 transition">
+          Simulate Successful QR Payment
+        </button>
+      </div>
+    </div>
+
+    <!-- ================= 12. PERSISTENT BOTTOM NAVIGATION BAR ================= -->
+    <nav id="bottomNav" class="hidden fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white/95 backdrop-blur-md border-t border-neutral-200 py-2.5 px-6 z-40 flex items-center justify-between shadow-lg no-print">
+      <button onclick="switchView('view-dashboard')" id="nav-btn-home" class="flex flex-col items-center gap-1 text-black font-extrabold">
+        <i class="fa-solid fa-house text-sm"></i>
+        <span class="text-[9px]">Home</span>
+      </button>
+
+      <button onclick="openMapModal()" id="nav-btn-map" class="flex flex-col items-center gap-1 text-neutral-400 hover:text-black">
+        <i class="fa-solid fa-map-location-dot text-sm"></i>
+        <span class="text-[9px]">Garages</span>
+      </button>
+
+      <button onclick="switchView('view-tracking')" id="nav-btn-track" class="flex flex-col items-center gap-1 text-neutral-400 hover:text-black">
+        <i class="fa-solid fa-video text-sm"></i>
+        <span class="text-[9px]">Live Bay</span>
+      </button>
+
+      <button onclick="viewGeneratedInvoice()" id="nav-btn-inv" class="flex flex-col items-center gap-1 text-neutral-400 hover:text-black">
+        <i class="fa-solid fa-file-invoice text-sm"></i>
+        <span class="text-[9px]">Invoice</span>
+      </button>
+
+      <button onclick="switchView('view-profile')" id="nav-btn-prof" class="flex flex-col items-center gap-1 text-neutral-400 hover:text-black">
+        <i class="fa-solid fa-user text-sm"></i>
+        <span class="text-[9px]">Profile</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <script>
+    // ================= 1. WEB AUDIO API SYNTHESIZER (ZERO EXTERNAL FILES) =================
+    class WebAudioSynthesizer {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // 1. Subtle Button Tap
+      playClickSound() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.04);
+          gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.04);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.04);
+        } catch(e) {}
+      }
+
+      // 2. Selection Pop (Bubble)
+      playPopSound() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(320, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(680, this.ctx.currentTime + 0.07);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.07);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.07);
+        } catch(e) {}
+      }
+
+      // 3. Success Fanfare Chord
+      playSuccessSound() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+          notes.forEach((freq, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.value = freq;
+            const startTime = this.ctx.currentTime + (idx * 0.07);
+            gain.gain.setValueAtTime(0.18, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 0.35);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(startTime);
+            osc.stop(startTime + 0.35);
+          });
+        } catch(e) {}
+      }
+
+      // 4. Camera Snapshot Mechanical Shutter
+      playShutterSound() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          // White noise buffer for shutter click
+          const bufferSize = this.ctx.sampleRate * 0.05;
+          const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+          }
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = buffer;
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'highpass';
+          filter.frequency.value = 1000;
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+          noise.start();
+
+          // Second click follow-up
+          setTimeout(() => {
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const g = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+            g.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+            osc.connect(g);
+            g.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.03);
+          }, 60);
+        } catch(e) {}
+      }
+
+      // 5. Engine Rev / Rumble Audio
+      playEngineRevSound() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          
+          const now = this.ctx.currentTime;
+          osc.frequency.setValueAtTime(70, now);
+          osc.frequency.exponentialRampToValueAtTime(240, now + 0.3);
+          osc.frequency.exponentialRampToValueAtTime(110, now + 0.7);
+
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.linearRampToValueAtTime(0.2, now + 0.3);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(now + 0.75);
+        } catch(e) {}
+      }
+    }
+
+    const soundSynth = new WebAudioSynthesizer();
+
+    function toggleAudioMute() {
+      soundSynth.enabled = !soundSynth.enabled;
+      const statusText = soundSynth.enabled ? "Audio ON" : "Muted";
+      const iconClass = soundSynth.enabled ? "fa-solid fa-volume-high text-emerald-600" : "fa-solid fa-volume-xmark text-neutral-400";
+      
+      const elHeader = document.getElementById('soundToggleBtnHeader');
+      if (elHeader) elHeader.innerHTML = `<i class="${iconClass} text-xs"></i>`;
+
+      const elAuth = document.getElementById('soundToggleBtnAuth');
+      if (elAuth) elAuth.innerHTML = `<i class="${iconClass} text-[11px]"></i> <span class="text-[10px]">${statusText}</span>`;
+
+      const elProf = document.getElementById('soundToggleBtnProf');
+      if (elProf) {
+        elProf.textContent = statusText;
+        elProf.className = soundSynth.enabled ? "px-3 py-1 bg-black text-white text-xs font-bold rounded-lg" : "px-3 py-1 bg-neutral-300 text-neutral-700 text-xs font-bold rounded-lg";
+      }
+
+      if (soundSynth.enabled) {
+        soundSynth.playPopSound();
+        showToast("Audio Enabled", "Synthesizer sounds and camera audio are now active.");
+      } else {
+        showToast("Audio Muted", "Sound effects silenced.");
+      }
+    }
+
+    // ================= 2. THE 25 MASTER CAR PROBLEMS DATABASE =================
+    const masterCarProblems = [
+      // 1. Engine & Fluid Maintenance Problems (5)
+      { id: "prob-1", catId: "eng", category: "Engine & Fluid", title: "Engine Oil Breakdown / Sludge", desc: "Sludge blocking oil passages & lubrication failure.", parts: 1450, labor: 650, origPrice: 3200, hsn: "998714" },
+      { id: "prob-2", catId: "eng", category: "Engine & Fluid", title: "Engine Oil Leaks", desc: "Fluid escaping from valve cover gasket or rear main seal.", parts: 1600, labor: 850, origPrice: 3600, hsn: "998714" },
+      { id: "prob-3", catId: "eng", category: "Engine & Fluid", title: "Engine Overheating", desc: "Failing thermostat, water pump impeller, or radiator hose leak.", parts: 2200, labor: 950, origPrice: 4800, hsn: "998714" },
+      { id: "prob-4", catId: "eng", category: "Engine & Fluid", title: "Sputtering or Misfiring Engine", desc: "Fouled spark plugs or blocked fuel injector nozzles.", parts: 1250, labor: 700, origPrice: 3100, hsn: "998714" },
+      { id: "prob-5", catId: "eng", category: "Engine & Fluid", title: "Blown Head Gasket", desc: "Coolant and engine oil mixing following extreme thermal stress.", parts: 3900, labor: 1800, origPrice: 8900, hsn: "998714" },
+
+      // 2. Electrical & Fuel System Problems (5)
+      { id: "prob-6", catId: "elec", category: "Electrical & Fuel", title: "Dead Battery", desc: "Parasitic drain, sulfurated cells, or weak charging state.", parts: 2800, labor: 200, origPrice: 4200, hsn: "998714" },
+      { id: "prob-7", catId: "elec", category: "Electrical & Fuel", title: "Failing Alternator", desc: "Charging diode failure causing dimming lights & stalling.", parts: 2900, labor: 800, origPrice: 5400, hsn: "998714" },
+      { id: "prob-8", catId: "elec", category: "Electrical & Fuel", title: "Faulty Starter Motor", desc: "Starter solenoid click or non-cranking ignition failure.", parts: 2100, labor: 650, origPrice: 4100, hsn: "998714" },
+      { id: "prob-9", catId: "elec", category: "Electrical & Fuel", title: "Blown Fuses & Relay Fault", desc: "Short circuits causing inoperative wiper, horn, or ECU relay.", parts: 250, labor: 450, origPrice: 1200, hsn: "998714" },
+      { id: "prob-10", catId: "elec", category: "Electrical & Fuel", title: "Failing Fuel Pump", desc: "Loss of fuel rail pressure preventing engine start.", parts: 2750, labor: 950, origPrice: 5600, hsn: "998714" },
+
+      // 3. Braking & Steering Problems (4)
+      { id: "prob-11", catId: "brake", category: "Brakes & Steering", title: "Worn Brake Pads", desc: "Squealing or grinding metal wear on friction pads.", parts: 1350, labor: 450, origPrice: 2800, hsn: "998714" },
+      { id: "prob-12", catId: "brake", category: "Brakes & Steering", title: "Warped Brake Rotors", desc: "Steering judder and pedal pulsation during braking.", parts: 1650, labor: 600, origPrice: 3400, hsn: "998714" },
+      { id: "prob-13", catId: "brake", category: "Brakes & Steering", title: "Brake Fluid Leaks", desc: "Spongy brake pedal caused by air or line caliper leakage.", parts: 650, labor: 550, origPrice: 1900, hsn: "998714" },
+      { id: "prob-14", catId: "brake", category: "Brakes & Steering", title: "Power Steering Fluid Loss", desc: "Heavy, groaning steering rack with fluid reservoir leak.", parts: 1100, labor: 700, origPrice: 2700, hsn: "998714" },
+
+      // 4. Suspension & Drivetrain Problems (4)
+      { id: "prob-15", catId: "susp", category: "Suspension & Drive", title: "Bad Wheel Bearings", desc: "Humming or roaring road noise escalating with vehicle speed.", parts: 1550, labor: 650, origPrice: 3200, hsn: "998714" },
+      { id: "prob-16", catId: "susp", category: "Suspension & Drive", title: "Worn Struts & Shock Absorbers", desc: "Nose-diving under braking and excessive rebound bounce.", parts: 3100, labor: 950, origPrice: 6200, hsn: "998714" },
+      { id: "prob-17", catId: "susp", category: "Suspension & Drive", title: "Damaged CV Boots / Axles", desc: "Repetitive clicking noise during sharp turning maneuvers.", parts: 1900, labor: 800, origPrice: 3900, hsn: "998714" },
+      { id: "prob-18", catId: "susp", category: "Suspension & Drive", title: "Transmission Slipping", desc: "Delayed engagement and high RPM revving without acceleration.", parts: 2400, labor: 1100, origPrice: 5800, hsn: "998714" },
+
+      // 5. Tires & Wheels (3)
+      { id: "prob-19", catId: "tires", category: "Tires & Wheels", title: "Uneven Tire Wear", desc: "Improper camber or toe angle scrubbing tire treads prematurely.", parts: 150, labor: 700, origPrice: 1500, hsn: "998715" },
+      { id: "prob-20", catId: "tires", category: "Tires & Wheels", title: "Flat Tires & Punctures", desc: "Nail penetration, rim bead leak, or damaged Schrader valve.", parts: 120, labor: 280, origPrice: 600, hsn: "998715" },
+      { id: "prob-21", catId: "tires", category: "Tires & Wheels", title: "Vibrating Wheels", desc: "Dynamic unbalance causing severe steering flutter above 70 km/h.", parts: 200, labor: 550, origPrice: 1400, hsn: "998715" },
+
+      // 6. Exhaust & Emission Problems (3)
+      { id: "prob-22", catId: "exh", category: "Exhaust & Emissions", title: "Failed Oxygen (O2) Sensor", desc: "Erratic air-fuel ratio triggering Check Engine light & high fuel burn.", parts: 1850, labor: 500, origPrice: 3400, hsn: "998714" },
+      { id: "prob-23", catId: "exh", category: "Exhaust & Emissions", title: "Clogged Catalytic Converter", desc: "Exhaust backpressure choking engine power and acceleration.", parts: 3200, labor: 900, origPrice: 6500, hsn: "998714" },
+      { id: "prob-24", catId: "exh", category: "Exhaust & Emissions", title: "Exhaust Leaks", desc: "Muffler cracks or rusted flange causing loud droning exhaust tone.", parts: 950, labor: 650, origPrice: 2400, hsn: "998714" },
+
+      // 7. Climate Control (1)
+      { id: "prob-25", catId: "ac", category: "Climate Control", title: "Air Conditioning Failure", desc: "Loss of cabin cooling due to gas leakage or compressor clutch slip.", parts: 1450, labor: 750, origPrice: 3600, hsn: "998716" }
+    ];
+
+    const problemCategories = [
+      { id: "all", label: "All 25 Problems" },
+      { id: "eng", label: "⚙️ Engine & Fluids" },
+      { id: "elec", label: "🔌 Electrical & Fuel" },
+      { id: "brake", label: "🛑 Brakes & Steering" },
+      { id: "susp", label: "💨 Suspension" },
+      { id: "tires", label: "🛞 Tires & Wheels" },
+      { id: "exh", label: "💨 Exhaust & Emission" },
+      { id: "ac", label: "🌡️ Climate Control" }
+    ];
+
+    // ================= 3. STANDARD MAINTENANCE SERVICE CATALOG =================
+    const standardServices = [
+      {
+        id: "serv-periodic",
+        name: "Periodic General Maintenance",
+        hsn: "998714",
+        partsCost: 1899,
+        laborCost: 800,
+        origPrice: 4400,
+        desc: "OEM 5W-30 Full Synthetic Oil Flush, OEM Oil Filter, Air/AC Filter cleaning & 40-point health scan.",
+        interval: "Every 10,000 KM"
+      },
+      {
+        id: "serv-brake",
+        name: "Brake System Overhaul & Pads",
+        hsn: "998714",
+        partsCost: 1100,
+        laborCost: 499,
+        origPrice: 2800,
+        desc: "OEM Ceramic front brake pads replacement, caliper pin greasing, disc rotor de-glazing & bleed.",
+        interval: "Recommended at 30,000–40,000 KM"
+      },
+      {
+        id: "serv-ac",
+        name: "AC Deep Clean & Gas Recharge",
+        hsn: "998716",
+        partsCost: 1250,
+        laborCost: 550,
+        origPrice: 3200,
+        desc: "R134a refrigerant evacuation & top-up, condenser pressure jet wash, evaporator foam anti-bacterial scrub.",
+        interval: "Annual Check"
+      },
+      {
+        id: "serv-clutch",
+        name: "Clutch Plate & Flywheel Overhaul",
+        hsn: "998714",
+        partsCost: 3800,
+        laborCost: 1400,
+        origPrice: 8500,
+        desc: "Genuine Valeo/OEM clutch plate, release bearing, pressure plate kit and cable/hydraulic calibration.",
+        interval: "At 50,000–60,000 KM"
+      }
+    ];
+
+    // ================= 4. EXPANDED LUXURY & STANDARD CAR ROSTER =================
+    const carCatalog = {
+      // Luxury / Premium Brands
+      "BMW": ["3 Series", "5 Series", "7 Series", "X1", "X3", "X5", "M340i"],
+      "Mercedes-Benz": ["A-Class", "C-Class", "E-Class", "GLA", "GLC", "GLE", "S-Class"],
+      "Audi": ["A4", "A6", "Q3", "Q5", "Q7", "e-tron"],
+      "Volvo": ["XC40", "XC60", "XC90", "S90"],
+      "Jaguar": ["XE", "XF", "F-Pace", "F-Type"],
+      "Land Rover": ["Defender", "Range Rover Evoque", "Discovery Sport", "Range Rover Velar"],
+      "Porsche": ["Macan", "Cayenne", "Panamera", "Taycan"],
+
+      // Everyday Popular Brands
+      "Kia": ["Carens", "Seltos", "Sonet", "Carnival", "EV6"],
+      "Hyundai": ["Creta", "Venue", "i20", "Verna", "Exter", "Tucson"],
+      "Maruti Suzuki": ["Swift", "Baleno", "Brezza", "Grand Vitara", "Fronx", "Ertiga", "Dzire"],
+      "Tata Motors": ["Nexon", "Punch", "Harrier", "Safari", "Tiago", "Altroz", "Curvv"],
+      "Toyota": ["Innova Crysta", "Innova Hycross", "Fortuner", "Urban Cruiser", "Glanza", "Camry"],
+      "Mahindra": ["XUV700", "Scorpio-N", "Thar", "XUV300", "XUV400", "Bolero Neo"],
+      "Honda": ["City", "Amaze", "Elevate"],
+      "Volkswagen": ["Virtus", "Taigun", "Tiguan"],
+      "Škoda": ["Slavia", "Kushaq", "Kodiaq"]
+    };
+
+    // ================= 5. HUBS DATABASE =================
+    const quickBayCities = [
+      { id: "tiruvallur", name: "Tiruvallur, TN", lat: 13.1432, lng: 79.9077, state: "Tamil Nadu", count: "340+ Garages" },
+      { id: "chennai", name: "Chennai, TN", lat: 13.0827, lng: 80.2707, state: "Tamil Nadu", count: "1,420+ Garages" },
+      { id: "coimbatore", name: "Coimbatore, TN", lat: 11.0168, lng: 76.9558, state: "Tamil Nadu", count: "890+ Garages" },
+      { id: "bengaluru", name: "Bengaluru, KA", lat: 12.9716, lng: 77.5946, state: "Karnataka", count: "2,150+ Garages" },
+      { id: "hyderabad", name: "Hyderabad, TS", lat: 17.3850, lng: 78.4867, state: "Telangana", count: "1,800+ Garages" },
+      { id: "mumbai", name: "Mumbai, MH", lat: 19.0760, lng: 72.8777, state: "Maharashtra", count: "2,600+ Garages" },
+      { id: "delhi", name: "Delhi NCR", lat: 28.6139, lng: 77.2090, state: "Delhi NCR", count: "2,900+ Garages" }
+    ];
+
+    // ================= 6. 5-STAGE PIPELINE =================
+    const trackingPipelineStages = [
+      { stage: 1, title: "Job Card Created & Spares Reserved", subtitle: "Diagnostic intake logged; genuine OEM filter & fluid kits locked in inventory.", icon: "fa-clipboard-check", statusText: "Confirmed" },
+      { stage: 2, title: "Vehicle Intake & OBD-II Diagnostics", subtitle: "Car rolled into assigned hydraulic lift bay. Electronic error code scan in progress.", icon: "fa-car-on", statusText: "Intake Verified" },
+      { stage: 3, title: "Active In-Bay Mechanical Care & Repairs", subtitle: "Technicians resolving identified problems and completing fluid/part replacements.", icon: "fa-wrench", statusText: "Under Service" },
+      { stage: 4, title: "Quality Road Test & Brake Check", subtitle: "Master technician road test to verify torque, pedal response, and alignment.", icon: "fa-gauge-high", statusText: "QC Testing" },
+      { stage: 5, title: "Washed, Sanitized & Ready for Handover", subtitle: "Exterior foam wash completed; digital service certificate and invoice issued.", icon: "fa-circle-check", statusText: "Ready for Delivery" }
+    ];
+
+    // ================= 7. GLOBAL APPLICATION STATE =================
+    let appState = {
+      user: {
+        name: "Yogesh A",
+        email: "yogesh.a@example.com",
+        phone: "9876543210",
+        city: "Tiruvallur, TN"
+      },
+      vehicle: {
+        brand: "Kia",
+        model: "Carens",
+        reg: "TN 20 BK 7892",
+        year: "2023",
+        fuel: "Diesel",
+        odometer: 38500
+      },
+      currentCity: quickBayCities[0],
+      selectedServiceIds: ["serv-periodic"],
+      selectedProblemIds: [], // User selected from the 25 master list
+      activeProblemCat: "all",
+      paymentMethod: "after_service", // 'after_service' or 'upi_online'
+      deliveryMode: "self", // 'self' or 'valet'
+      activeFilter: "all",
+      selectedWorkshop: null,
+      activeCctvCam: 1,
+      booking: {
+        id: "QB-2026-89410",
+        pin: "4092",
+        currentStage: 1,
+        technician: "V. Senthil Kumar (Master Tech)",
+        bayNumber: "Bay #03",
+        paymentOption: "after_service",
+        upiApp: "None (Pay at Counter)",
+        upiUtr: "PENDING_AT_BAY",
+        timestamp: "14-10-2026 21:15",
+        totals: {
+          parts: 1899,
+          labor: 800,
+          valet: 0,
+          subtotal: 2699,
+          gst: 485,
+          total: 3184,
+          dealerBenchmark: 4400
+        }
+      },
+      workshops: [],
+      userLocation: null,
+      authUser: null,
+      vehicleId: null,
+      mapInstance: null,
+      mapMarkers: []
+    };
+
+    // Haversine distance
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return (R * c).toFixed(1);
+    }
+
+    // Procedural Workshop Generator
+    function generateWorkshopsForCity(cityObj) {
+      const prefixes = ["Splash", "Apex", "Precision", "Prime", "Imperial", "Grand", "Speed", "SIDCO", "FastTrack", "Highway", "Master", "Elite", "ProCare", "Omega", "Vanguard"];
+      const suffixes = ["Automotive Works", "Car Care Studio", "Motor Clinic", "Express Bay", "Tech Garage", "Multi-Brand Hub", "Precision Workshop", "Autocare Station"];
+      const localities = {
+        "tiruvallur": ["PWD Road, Manavalanagar", "SIDCO Industrial Estate, Kakkalur", "C.V. Naidu Salai", "Sevvapet High Road", "Veppampattu Border", "Kadambathur Bypass", "Periyakuppam Junction"],
+        "chennai": ["Anna Nagar West", "Guindy Industrial Estate", "OMR Thoraipakkam", "Velachery Main Rd", "Ambattur OT", "Porur Junction", "Adyar Bridge Rd"],
+        "bengaluru": ["Koramangala 4th Block", "Whitefield Main Rd", "Electronic City Phase 1", "Indiranagar 100ft Rd", "HSR Layout Sector 2"]
+      };
+
+      const cityKey = cityObj.id.toLowerCase();
+      const areaList = localities[cityKey] || [`${cityObj.name} Central`, `${cityObj.name} Bypass Rd`, `${cityObj.name} Industrial Area`];
+
+      const generated = [];
+      for (let i = 0; i < 20; i++) {
+        const prefix = prefixes[i % prefixes.length];
+        const suffix = suffixes[(i * 3) % suffixes.length];
+        const area = areaList[i % areaList.length];
+        const latOffset = (Math.sin(i * 1.7) * 0.065);
+        const lngOffset = (Math.cos(i * 2.3) * 0.065);
+        const shopLat = cityObj.lat + latOffset;
+        const shopLng = cityObj.lng + lngOffset;
+        const dist = calculateDistance(cityObj.lat, cityObj.lng, shopLat, shopLng);
+        const rating = (4.5 + ((i * 7) % 5) * 0.1).toFixed(1);
+
+        generated.push({
+          id: i + 1,
+          name: `${prefix} ${suffix}`,
+          location: `${area}, ${cityObj.name}`,
+          dist: parseFloat(dist),
+          rating: parseFloat(rating),
+          reviews: 90 + (i * 31),
+          oem: (i % 2 === 0),
+          bays: 2 + (i % 6),
+          coords: [shopLat, shopLng],
+          phone: `+91 ${9840000000 + (i * 3821)}`
+        });
+      }
+      generated.sort((a, b) => a.dist - b.dist);
+      return generated;
+    }
+
+    // ================= 8. APPLICATION LIFECYCLE INIT =================
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const overlay = document.getElementById('loaderOverlay');
+        overlay.classList.add('opacity-0');
+        setTimeout(() => overlay.style.display = 'none', 500);
+      }, 850);
+
+      populateCarYears();
+      updateCarModels();
+      setupOtpAutoAdvance();
+      populateCityModalList();
+      checkOdometerMilestone();
+
+      appState.workshops = generateWorkshopsForCity(appState.currentCity);
+      appState.selectedWorkshop = appState.workshops[0];
+
+      renderProblemCategories();
+      renderMasterProblemsList();
+      renderStandardServices();
+      renderWorkshops(appState.workshops);
+      calculateCurrentBill();
+
+      // Start CCTV Canvas Loop & Clock
+      startCctvStreamEngine();
+      initializeQuickBayAuth();
+    });
+
+    // ================= TOAST SYSTEM =================
+    function showToast(title, message, isSuccess = true) {
+      const toast = document.getElementById('toastNotification');
+      const toastTitle = document.getElementById('toastTitle');
+      const toastMsg = document.getElementById('toastMessage');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastTitle.textContent = title;
+      toastMsg.textContent = message;
+
+      if (isSuccess) {
+        toastIcon.className = "w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-sm";
+        toastIcon.innerHTML = '<i class="fa-solid fa-check"></i>';
+      } else {
+        toastIcon.className = "w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 text-sm";
+        toastIcon.innerHTML = '<i class="fa-solid fa-circle-info"></i>';
+      }
+
+      toast.classList.remove('opacity-0', '-translate-y-24');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', '-translate-y-24');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 3500);
+    }
+
+    // ================= SUPABASE AUTH + CUSTOMER DATA =================
+    const QUICKBAY_SUPABASE_URL = "https://zotokdookrbnjfyldizr.supabase.co";
+    const QUICKBAY_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_BvXYQsmXe0S5M65jcNXmkA_RkBps1TG";
+    const quickBaySupabase = window.supabase?.createClient
+      ? window.supabase.createClient(QUICKBAY_SUPABASE_URL, QUICKBAY_SUPABASE_PUBLISHABLE_KEY, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+        })
+      : null;
+
+    async function signInWithGoogle() {
+      soundSynth.playClickSound();
+      if (!quickBaySupabase) {
+        showToast("Authentication unavailable", "Supabase client could not load. Check your internet connection and reload.", false);
+        return;
+      }
+      const button = document.getElementById("googleSignInButton");
+      if (button) { button.disabled = true; button.classList.add("opacity-60"); }
+      try {
+        const { error } = await quickBaySupabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: window.location.origin + window.location.pathname,
+            queryParams: { prompt: "select_account" }
+          }
+        });
+        if (error) throw error;
+      } catch (error) {
+        showToast("Google sign-in failed", error.message || "Please try again.", false);
+        if (button) { button.disabled = false; button.classList.remove("opacity-60"); }
+      }
+    }
+
+    let quickBayHandledUserId = null;
+    async function syncAuthenticatedCustomer(session) {
+      if (!session?.user || !quickBaySupabase) return;
+      const user = session.user;
+      if (quickBayHandledUserId === user.id) return;
+      quickBayHandledUserId = user.id;
+      appState.authUser = user;
+      appState.user.name = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "QuickBay Customer";
+      appState.user.email = user.email || "";
+      const phone = user.phone || user.user_metadata?.phone || "";
+      if (phone) appState.user.phone = phone.replace(/^\+91/, "").replace(/\D/g, "").slice(-10);
+
+      // Supabase's existing on_auth_user_created trigger creates the profiles row.
+      const { error: profileError } = await quickBaySupabase
+        .from("profiles")
+        .update({ full_name: appState.user.name, email: appState.user.email })
+        .eq("id", user.id);
+      if (profileError) console.warn("QuickBay profile sync:", profileError.message);
+
+      const { data: vehicles, error: vehicleError } = await quickBaySupabase
+        .from("vehicles")
+        .select("id,registration_number,manufacturer,model,manufacturing_year,fuel_type,odometer_km")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (!vehicleError && vehicles?.length) {
+        const saved = vehicles[0];
+        appState.vehicleId = saved.id;
+        appState.vehicle = {
+          ...appState.vehicle,
+          reg: saved.registration_number,
+          brand: saved.manufacturer,
+          model: saved.model,
+          year: String(saved.manufacturing_year || appState.vehicle.year),
+          fuel: saved.fuel_type || appState.vehicle.fuel,
+          odometer: saved.odometer_km || appState.vehicle.odometer
+        };
+      }
+
+      const nameInput = document.getElementById("inputName");
+      const emailInput = document.getElementById("inputEmail");
+      if (nameInput) nameInput.value = appState.user.name;
+      if (emailInput) emailInput.value = appState.user.email;
+
+      if (appState.vehicleId) {
+        document.getElementById("regNumber").value = appState.vehicle.reg;
+        document.getElementById("carBrand").value = appState.vehicle.brand;
+        updateCarModels();
+        document.getElementById("carYear").value = appState.vehicle.year;
+        document.getElementById("carFuel").value = appState.vehicle.fuel;
+        document.getElementById("inputOdometer").value = appState.vehicle.odometer;
+        document.getElementById("badgeVehicleName").textContent = appState.vehicle.model;
+        document.getElementById("dashOdoText").textContent = `${Number(appState.vehicle.odometer).toLocaleString("en-IN")} KM`;
+        switchView("view-dashboard");
+      } else {
+        switchView("view-vehicle");
+      }
+      showToast("Google account connected", `Welcome to QuickBay, ${appState.user.name}.`);
+    }
+
+    async function persistQuickBayVehicle() {
+      if (!quickBaySupabase || !appState.authUser?.id) return null;
+      const payload = {
+        owner_id: appState.authUser.id,
+        registration_number: appState.vehicle.reg,
+        manufacturer: appState.vehicle.brand,
+        model: appState.vehicle.model,
+        manufacturing_year: Number(appState.vehicle.year) || null,
+        fuel_type: appState.vehicle.fuel,
+        odometer_km: Number(appState.vehicle.odometer) || 0
+      };
+      const result = appState.vehicleId
+        ? await quickBaySupabase.from("vehicles").update(payload).eq("id", appState.vehicleId).select("id").single()
+        : await quickBaySupabase.from("vehicles").insert(payload).select("id").single();
+      if (result.error) throw result.error;
+      appState.vehicleId = result.data.id;
+      return appState.vehicleId;
+    }
+
+    async function persistQuickBayBooking() {
+      if (!quickBaySupabase || !appState.authUser?.id) return;
+      const vehicleId = appState.vehicleId || await persistQuickBayVehicle();
+      if (!vehicleId) throw new Error("Save your vehicle before confirming a booking.");
+      const shop = appState.selectedWorkshop;
+      const notes = [
+        shop ? `Selected mapped centre: ${shop.name}` : "Workshop not selected",
+        shop?.location ? `Address: ${shop.location}` : "",
+        shop?.id ? `Directory reference: ${shop.id}` : "",
+        `Payment preference: ${appState.paymentMethod}`,
+        `Delivery preference: ${appState.deliveryMode}`,
+        `Estimated total: INR ${appState.booking.totals?.total || 0}`
+      ].filter(Boolean).join("\n");
+      const { error } = await quickBaySupabase.from("bookings").insert({
+        booking_code: appState.booking.id,
+        customer_id: appState.authUser.id,
+        vehicle_id: vehicleId,
+        workshop_id: null,
+        requested_service: (appState.selectedServiceIds || []).join(", ") || "General vehicle service",
+        status: "requested",
+        customer_notes: notes
+      });
+      if (error) throw error;
+    }
+
+    async function signOutQuickBay() {
+      if (!quickBaySupabase) return;
+      const { error } = await quickBaySupabase.auth.signOut();
+      if (error) { showToast("Sign-out failed", error.message, false); return; }
+      appState.authUser = null;
+      appState.vehicleId = null;
+      switchView("view-phone");
+      showToast("Signed out", "You have been signed out of QuickBay.");
+    }
+
+    function initializeQuickBayAuth() {
+      if (!quickBaySupabase) return;
+      quickBaySupabase.auth.onAuthStateChange((event, session) => {
+        if (session?.user) setTimeout(() => syncAuthenticatedCustomer(session), 0);
+        if (event === "SIGNED_OUT") {
+          appState.authUser = null;
+          appState.vehicleId = null;
+          quickBayHandledUserId = null;
+        }
+      });
+      quickBaySupabase.auth.getSession().then(({ data, error }) => {
+        if (error) console.warn("QuickBay session restore:", error.message);
+        if (data?.session) syncAuthenticatedCustomer(data.session);
+      });
+    }
+
+    // ================= SCREEN SWITCHER =================
+    function switchView(viewId) {
+      soundSynth.playClickSound();
+      const views = ['view-phone', 'view-otp', 'view-vehicle', 'view-dashboard', 'view-checkout', 'view-tracking', 'view-invoice', 'view-profile'];
+      views.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+
+      const target = document.getElementById(viewId);
+      if (target) {
+        target.classList.remove('hidden');
+        window.scrollTo(0, 0);
+      }
+
+      const bottomNav = document.getElementById('bottomNav');
+      const authenticatedScreens = ['view-dashboard', 'view-tracking', 'view-checkout', 'view-invoice', 'view-profile'];
+      
+      if (authenticatedScreens.includes(viewId)) {
+        bottomNav.classList.remove('hidden');
+        updateNavIcons(viewId);
+      } else {
+        bottomNav.classList.add('hidden');
+      }
+
+      if (viewId === 'view-tracking') {
+        renderTrackingPipeline();
+      }
+      if (viewId === 'view-profile') {
+        syncProfileFields();
+      }
+    }
+
+    function updateNavIcons(viewId) {
+      const map = {
+        'view-dashboard': 'nav-btn-home',
+        'view-tracking': 'nav-btn-track',
+        'view-invoice': 'nav-btn-inv',
+        'view-profile': 'nav-btn-prof'
+      };
+      ['nav-btn-home', 'nav-btn-map', 'nav-btn-track', 'nav-btn-inv', 'nav-btn-prof'].forEach(btnId => {
+        const el = document.getElementById(btnId);
+        if (el) {
+          el.classList.remove('text-black', 'font-extrabold');
+          el.classList.add('text-neutral-400');
+        }
+      });
+      const activeBtnId = map[viewId];
+      if (activeBtnId) {
+        const activeBtn = document.getElementById(activeBtnId);
+        if (activeBtn) {
+          activeBtn.classList.remove('text-neutral-400');
+          activeBtn.classList.add('text-black', 'font-extrabold');
+        }
+      }
+    }
+
+    // ================= AUTH LOGIC =================
+    function requestOTP() {
+      soundSynth.playClickSound();
+      const name = document.getElementById('inputName').value.trim();
+      const email = document.getElementById('inputEmail').value.trim();
+      const phone = document.getElementById('inputPhone').value.trim();
+
+      if (!name) {
+        showToast("Name Required", "Enter your full name to continue.", false);
+        document.getElementById('inputName').focus();
+        return;
+      }
+      if (!phone || !/^\d{10}$/.test(phone)) {
+        showToast("Invalid Mobile", "Enter a valid 10-digit mobile number.", false);
+        return;
+      }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showToast("Email Required", "Enter an email address to receive tax invoices.", false);
+        return;
+      }
+
+      appState.user.name = name;
+      appState.user.email = email;
+      appState.user.phone = phone;
+
+      document.getElementById('displayPhone').textContent = `+91 ${phone.slice(0, 5)} ${phone.slice(5)}`;
+      document.getElementById('displayEmail').textContent = email;
+      switchView('view-otp');
+      showToast("OTP Dispatched", `Verification code sent to +91 ${phone}`);
+    }
+
+    function fillDemoOTP() {
+      soundSynth.playPopSound();
+      const boxes = document.querySelectorAll('.otp-box');
+      const demoDigits = ['8', '8', '4', '2'];
+      boxes.forEach((box, i) => box.value = demoDigits[i]);
+      showToast("Code Auto-Filled", "Demo PIN '8842' entered.");
+    }
+
+    function setupOtpAutoAdvance() {
+      const boxes = document.querySelectorAll('.otp-box');
+      boxes.forEach((box, index) => {
+        box.addEventListener('input', (e) => {
+          if (e.target.value.length === 1 && index < boxes.length - 1) {
+            boxes[index + 1].focus();
+          }
+        });
+        box.addEventListener('keydown', (e) => {
+          if (e.key === 'Backspace' && !e.target.value && index > 0) {
+            boxes[index - 1].focus();
+          }
+        });
+      });
+    }
+
+    function verifyOTP() {
+      soundSynth.playSuccessSound();
+      showToast("Identity Verified", `Welcome, ${appState.user.name}`);
+      switchView('view-vehicle');
+    }
+
+    // ================= VEHICLE & LUXURY FLEET ENGINE =================
+    function populateCarYears() {
+      const yearSelect = document.getElementById('carYear');
+      yearSelect.innerHTML = '';
+      for (let y = 2026; y >= 2010; y--) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === 2023) opt.selected = true;
+        yearSelect.appendChild(opt);
+      }
+    }
+
+    function updateCarModels() {
+      const brand = document.getElementById('carBrand').value;
+      const modelSelect = document.getElementById('carModel');
+      modelSelect.innerHTML = '';
+      const models = carCatalog[brand] || ["Standard Model"];
+      models.forEach((m, idx) => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        if (idx === 0) opt.selected = true;
+        modelSelect.appendChild(opt);
+      });
+    }
+
+    function checkOdometerMilestone() {
+      const val = parseInt(document.getElementById('inputOdometer').value) || 0;
+      const notice = document.getElementById('odometerNotice');
+      const pill = document.getElementById('odometerAdvisoryPill');
+
+      if (val < 10000) {
+        pill.textContent = "< 10k KM (Break-In)";
+        notice.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> Running-in phase. General fluid level inspection &amp; 3D alignment recommended.';
+      } else if (val >= 10000 && val < 30000) {
+        pill.textContent = "10k–30k KM (Regular)";
+        notice.innerHTML = '<i class="fa-solid fa-wrench text-blue-600 mr-1"></i> Periodic Synthetic Oil Flush &amp; AC dust filter replacement are due.';
+      } else if (val >= 30000 && val < 50000) {
+        pill.textContent = "30k–50k KM (Wear Alert)";
+        notice.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1"></i> Critical milestone: Brake Pad wear check, rotor polishing, &amp; brake fluid bleed recommended.';
+      } else {
+        pill.textContent = "50k+ KM (Major Care)";
+        notice.innerHTML = '<i class="fa-solid fa-gear text-red-600 mr-1"></i> Heavy maintenance phase: Suspension dampers, clutch release bearings, &amp; coolant flush suggested.';
+      }
+    }
+
+    async function saveVehicle() {
+      soundSynth.playPopSound();
+      const reg = document.getElementById('regNumber').value.trim().toUpperCase() || "TN 20 BK 7892";
+      const brand = document.getElementById('carBrand').value;
+      const model = document.getElementById('carModel').value;
+      const year = document.getElementById('carYear').value;
+      const fuel = document.getElementById('carFuel').value;
+      const odo = parseInt(document.getElementById('inputOdometer').value) || 38500;
+      appState.vehicle = { ...appState.vehicle, reg, brand, model, year, fuel, odometer: odo };
+      try {
+        if (appState.authUser?.id) await persistQuickBayVehicle();
+        document.getElementById('badgeVehicleName').textContent = model;
+        document.getElementById('dashOdoText').textContent = `${odo.toLocaleString('en-IN')} KM`;
+        showToast("Car Registered", appState.authUser ? `${brand} ${model} saved to your QuickBay account.` : `${brand} ${model} saved in this test session.`);
+        switchView('view-dashboard');
+      } catch (error) {
+        showToast("Vehicle not saved", error.message || "Please try again.", false);
+      }
+    }
+
+    // ================= 25 MASTER CAR PROBLEMS UI LOGIC =================
+    function renderProblemCategories() {
+      const container = document.getElementById('problemCategoryPills');
+      container.innerHTML = problemCategories.map(cat => {
+        const isActive = appState.activeProblemCat === cat.id;
+        return `
+          <button onclick="setProblemCategory('${cat.id}')" class="px-3 py-1.5 rounded-full text-xs font-bold shrink-0 transition ${isActive ? 'bg-black text-white font-extrabold' : 'bg-white text-neutral-700 border border-neutral-200'}">
+            ${cat.label}
+          </button>        `;
+      }).join('');
+    }
+
+    function setProblemCategory(catId) {
+      soundSynth.playClickSound();
+      appState.activeProblemCat = catId;
+      renderProblemCategories();
+      renderMasterProblemsList();
+    }
+
+    function renderMasterProblemsList() {
+      const container = document.getElementById('masterProblemsList');
+      const filtered = (appState.activeProblemCat === 'all')
+        ? masterCarProblems
+        : masterCarProblems.filter(p => p.catId === appState.activeProblemCat);
+
+      container.innerHTML = filtered.map(prob => {
+        const isChecked = appState.selectedProblemIds.includes(prob.id);
+        const estTotal = prob.parts + prob.labor;
+        return `
+          <div onclick="toggleProblemSelection('${prob.id}')" class="p-2.5 rounded-xl border ${isChecked ? 'border-2 border-black bg-white shadow-sm' : 'border-neutral-200 bg-white/70 hover:border-neutral-400'} transition cursor-pointer flex items-center justify-between">
+            <div class="flex items-start gap-2.5">
+              <div class="mt-0.5 w-4 h-4 rounded border ${isChecked ? 'bg-black border-black text-white' : 'border-neutral-300 bg-white'} flex items-center justify-center text-[10px] shrink-0">
+                ${isChecked ? '<i class="fa-solid fa-check"></i>' : ''}
+              </div>
+              <div>
+                <p class="text-xs font-bold text-black leading-tight">${prob.title}</p>
+                <p class="text-[10px] text-neutral-500 leading-tight mt-0.5">${prob.desc}</p>
+              </div>
+            </div>
+            <div class="text-right shrink-0 pl-2">
+              <span class="text-xs font-black text-black">₹${estTotal.toLocaleString('en-IN')}</span>
+              <span class="text-[9px] text-emerald-600 font-bold block">Save ${Math.round(((prob.origPrice - estTotal)/prob.origPrice)*100)}%</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('diagnosedCountBadge').textContent = `${appState.selectedProblemIds.length} Added`;
+    }
+
+    function toggleProblemSelection(probId) {
+      soundSynth.playPopSound();
+      if (appState.selectedProblemIds.includes(probId)) {
+        appState.selectedProblemIds = appState.selectedProblemIds.filter(id => id !== probId);
+      } else {
+        appState.selectedProblemIds.push(probId);
+      }
+      renderMasterProblemsList();
+      calculateCurrentBill();
+    }
+
+    // ================= STANDARD SERVICES UI =================
+    function renderStandardServices() {
+      const container = document.getElementById('serviceCatalogGrid');
+      container.innerHTML = standardServices.map(serv => {
+        const isSelected = appState.selectedServiceIds.includes(serv.id);
+        const totalJobPrice = serv.partsCost + serv.laborCost;
+        return `
+          <div onclick="toggleService('${serv.id}')" class="p-3.5 rounded-2xl border ${isSelected ? 'border-2 border-black bg-neutral-50 shadow-sm' : 'border-neutral-200 bg-white hover:border-neutral-400'} transition cursor-pointer">
+            <div class="flex items-start justify-between">
+              <div class="flex items-start gap-2.5">
+                <div class="mt-0.5 w-5 h-5 rounded-md border ${isSelected ? 'bg-black border-black text-white' : 'border-neutral-300 bg-white'} flex items-center justify-center text-xs shrink-0">
+                  ${isSelected ? '<i class="fa-solid fa-check text-[10px]"></i>' : ''}
+                </div>
+                <div>
+                  <h4 class="text-xs font-black text-black leading-snug">${serv.name}</h4>
+                  <p class="text-[10px] text-neutral-500 mt-0.5">${serv.desc}</p>
+                  <span class="inline-block text-[9px] font-bold text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded mt-1.5">${serv.interval}</span>
+                </div>
+              </div>
+              <div class="text-right shrink-0 pl-2">
+                <span class="text-xs font-black text-black">₹${totalJobPrice.toLocaleString('en-IN')}</span>
+                <span class="text-[10px] line-through text-neutral-400 block">₹${serv.origPrice.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('serviceCountBadge').textContent = `${appState.selectedServiceIds.length} Selected`;
+    }
+
+    function toggleService(serviceId) {
+      soundSynth.playPopSound();
+      if (appState.selectedServiceIds.includes(serviceId)) {
+        if (appState.selectedServiceIds.length === 1 && appState.selectedProblemIds.length === 0) {
+          showToast("Minimum 1 Service", "Keep at least 1 service or car symptom selected.", false);
+          return;
+        }
+        appState.selectedServiceIds = appState.selectedServiceIds.filter(id => id !== serviceId);
+      } else {
+        appState.selectedServiceIds.push(serviceId);
+      }
+      renderStandardServices();
+      calculateCurrentBill();
+    }
+
+    // ================= TRANSPARENT BILL & GST ENGINE =================
+    function calculateCurrentBill() {
+      let partsTotal = 0;
+      let laborTotal = 0;
+      let dealerBenchmark = 0;
+
+      // 1. Standard Services
+      appState.selectedServiceIds.forEach(id => {
+        const serv = standardServices.find(s => s.id === id);
+        if (serv) {
+          partsTotal += serv.partsCost;
+          laborTotal += serv.laborCost;
+          dealerBenchmark += serv.origPrice;
+        }
+      });
+
+      // 2. Diagnosed Problems from 25 Master List
+      appState.selectedProblemIds.forEach(id => {
+        const prob = masterCarProblems.find(p => p.id === id);
+        if (prob) {
+          partsTotal += prob.parts;
+          laborTotal += prob.labor;
+          dealerBenchmark += prob.origPrice;
+        }
+      });
+
+      const valetFee = (appState.deliveryMode === 'valet') ? 199 : 0;
+      const subtotal = partsTotal + laborTotal + valetFee;
+      const gst = Math.round(subtotal * 0.18);
+      const grandTotal = subtotal + gst;
+
+      appState.booking.totals = {
+        parts: partsTotal,
+        labor: laborTotal,
+        valet: valetFee,
+        subtotal: subtotal,
+        gst: gst,
+        total: grandTotal,
+        dealerBenchmark: dealerBenchmark
+      };
+
+      // Update UI in checkout
+      document.getElementById('coPartsCost').textContent = `₹${partsTotal.toLocaleString('en-IN')}`;
+      document.getElementById('coLaborCost').textContent = `₹${laborTotal.toLocaleString('en-IN')}`;
+      document.getElementById('coValetCost').textContent = `₹${valetFee.toLocaleString('en-IN')}`;
+      document.getElementById('coGstCost').textContent = `₹${gst.toLocaleString('en-IN')}`;
+      document.getElementById('coDealerCost').textContent = `₹${dealerBenchmark.toLocaleString('en-IN')}`;
+      document.getElementById('coTotalPayable').textContent = `₹${grandTotal.toLocaleString('en-IN')}`;
+      document.getElementById('qrPayableAmount').textContent = `₹${grandTotal.toLocaleString('en-IN')}`;
+
+      const saved = Math.max(0, dealerBenchmark - grandTotal);
+      const savedPct = Math.round((saved / (dealerBenchmark || 1)) * 100);
+      document.getElementById('coSavingsText').textContent = `You save ₹${saved.toLocaleString('en-IN')} (${savedPct}%) vs authorized dealerships`;
+
+      updatePayButtonLabel();
+    }
+
+    function setDeliveryMode(mode) {
+      soundSynth.playPopSound();
+      appState.deliveryMode = mode;
+      const selfCard = document.getElementById('opt-mode-self');
+      const valetCard = document.getElementById('opt-mode-valet');
+
+      if (mode === 'self') {
+        selfCard.className = "p-3 border-2 border-black rounded-xl flex flex-col justify-between cursor-pointer bg-neutral-50";
+        valetCard.className = "p-3 border border-neutral-200 rounded-xl flex flex-col justify-between cursor-pointer";
+        selfCard.querySelector('.fa-circle-check').classList.remove('hidden');
+      } else {
+        valetCard.className = "p-3 border-2 border-black rounded-xl flex flex-col justify-between cursor-pointer bg-neutral-50";
+        selfCard.className = "p-3 border border-neutral-200 rounded-xl flex flex-col justify-between cursor-pointer";
+        showToast("Valet Mode Added", "Doorstep pickup and return escort confirmed (+₹199).");
+      }
+      calculateCurrentBill();
+    }
+
+    // ================= PAYMENT SELECTION: AFTER SERVICE vs UPI =================
+    function selectPaymentOption(mode) {
+      soundSynth.playPopSound();
+      appState.paymentMethod = mode;
+      const optAfter = document.getElementById('pay-opt-after');
+      const optUpi = document.getElementById('pay-opt-upi');
+      const checkAfter = document.getElementById('pay-check-after');
+      const checkUpi = document.getElementById('pay-check-upi');
+      const upiSub = document.getElementById('upiSubOptionsArea');
+
+      if (mode === 'after_service') {
+        optAfter.className = "p-3 rounded-xl border-2 border-black bg-neutral-50 cursor-pointer flex flex-col justify-between";
+        optUpi.className = "p-3 rounded-xl border border-neutral-200 bg-white cursor-pointer flex flex-col justify-between";
+        checkAfter.classList.remove('hidden');
+        checkUpi.classList.add('hidden');
+        upiSub.classList.add('hidden');
+        document.getElementById('coPayableLabel').textContent = "Payable Post-Service";
+      } else {
+        optUpi.className = "p-3 rounded-xl border-2 border-black bg-neutral-50 cursor-pointer flex flex-col justify-between";
+        optAfter.className = "p-3 rounded-xl border border-neutral-200 bg-white cursor-pointer flex flex-col justify-between";
+        checkUpi.classList.remove('hidden');
+        checkAfter.classList.add('hidden');
+        upiSub.classList.remove('hidden');
+        document.getElementById('coPayableLabel').textContent = "Payable Now via UPI";
+      }
+      updatePayButtonLabel();
+    }
+
+    function updatePayButtonLabel() {
+      const btnLabel = document.getElementById('confirmBookingBtnLabel');
+      const totalStr = `₹${appState.booking.totals.total.toLocaleString('en-IN')}`;
+      if (appState.paymentMethod === 'after_service') {
+        btnLabel.textContent = `Reserve Bay (Pay ${totalStr} at Workshop)`;
+      } else {
+        btnLabel.textContent = `Pay ${totalStr} via UPI & Reserve Bay`;
+      }
+    }
+
+    let selectedUpiMethod = "gpay";
+    function selectUpiApp(method) {
+      soundSynth.playPopSound();
+      selectedUpiMethod = method;
+      ['gpay', 'phonepe', 'paytm', 'qr'].forEach(m => {
+        const btn = document.getElementById(`upi-btn-${m}`);
+        if (m === method) {
+          btn.classList.add('border-black', 'border-2');
+          btn.classList.remove('border-neutral-200');
+        } else {
+          btn.classList.remove('border-black', 'border-2');
+          btn.classList.add('border-neutral-200');
+        }
+      });
+      if (method === 'qr') {
+        document.getElementById('upiQrModal').classList.remove('hidden');
+      }
+    }
+
+    function closeUpiQrModal() {
+      document.getElementById('upiQrModal').classList.add('hidden');
+    }
+
+    function completeQrPayment() {
+      soundSynth.playSuccessSound();
+      closeUpiQrModal();
+      appState.booking.upiApp = "Dynamic UPI QR";
+      finishBookingFlow(true);
+    }
+
+    function verifyVpa() {
+      soundSynth.playClickSound();
+      const vpa = document.getElementById('customUpiId').value.trim();
+      if (!vpa || !vpa.includes('@')) {
+        showToast("Invalid UPI ID", "Specify a valid Virtual Payment Address (e.g. mobile@upi)", false);
+        return;
+      }
+      showToast("VPA Verified", `UPI ID ${vpa} authorized for 1-click settlement.`);
+    }
+
+    // ================= WORKSHOPS FEED & FILTERING =================
+    function escapeWorkshopText(value) {
+      return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    function workshopDirectionsUrl(shop) {
+      return `https://www.google.com/maps/dir/?api=1&destination=${shop.coords[0]},${shop.coords[1]}`;
+    }
+
+    function renderWorkshops(list) {
+      const container = document.getElementById('workshopsFeed');
+      appState.displayedWorkshops = Array.isArray(list) ? list.slice() : [];
+      if (!list || !list.length) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-neutral-500">No real service-centre listings were found in this search area. Try a wider area or another location.</div>`;
+        return;
+      }
+
+      container.innerHTML = list.map(shop => {
+        const name = escapeWorkshopText(shop.name);
+        const location = escapeWorkshopText(shop.location || 'Address not listed');
+        const ratingMarkup = Number.isFinite(shop.rating)
+          ? `<span class="inline-flex items-center text-xs font-black bg-neutral-100 text-neutral-900 px-2 py-0.5 rounded">★ ${shop.rating.toFixed(1)}</span>`
+          : `<span class="inline-flex items-center text-[10px] font-bold bg-neutral-100 text-neutral-600 px-2 py-0.5 rounded">Rating not listed</span>`;
+        // Keep digits and at most one leading plus; never render a tel:+ link.
+        const rawPhone = String(shop.phone || '').trim();
+        const phoneDigits = rawPhone.replace(/\D/g, '');
+        const dialNumber = phoneDigits
+          ? (rawPhone.startsWith('+') ? '+' : '') + phoneDigits
+          : '';
+        const phoneMarkup = dialNumber
+          ? `<a href="tel:${escapeWorkshopText(dialNumber)}" onclick="event.stopPropagation()" class="flex-1 min-h-10 rounded-xl bg-black text-white px-3 py-2.5 text-[11px] font-extrabold flex items-center justify-center gap-2"><i class="fa-solid fa-phone"></i> Call centre</a>`
+          : `<span class="flex-1 min-h-10 rounded-xl bg-neutral-100 text-neutral-400 px-3 py-2.5 text-[10px] font-bold flex items-center justify-center gap-2"><i class="fa-solid fa-phone-slash"></i> Phone not listed</span>`;
+        return `
+        <div data-workshop-id="${escapeWorkshopText(shop.id)}" onclick="selectWorkshopFromCard(this)" class="p-4 rounded-2xl border border-neutral-200 bg-white hover:border-black transition shadow-sm">
+          <div class="flex justify-between items-start gap-3">
+            <div class="pr-1 min-w-0">
+              <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+                <span class="text-[9px] font-black uppercase bg-emerald-50 text-emerald-800 border border-emerald-100 px-1.5 py-0.5 rounded">OpenStreetMap listing</span>
+              </div>
+              <h4 class="text-sm font-extrabold text-black leading-tight">${name}</h4>
+              <p class="text-xs text-neutral-500 mt-1">${location}</p>
+            </div>
+            <div class="text-right shrink-0">
+              ${ratingMarkup}
+              <p class="text-[10px] text-neutral-500 mt-1 font-bold">${Number(shop.dist).toFixed(1)} km away</p>
+            </div>
+          </div>
+          <div class="mt-3 pt-3 border-t border-neutral-100 flex items-center gap-2">
+            ${phoneMarkup}
+            <a href="${workshopDirectionsUrl(shop)}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" class="flex-1 min-h-10 rounded-xl border border-neutral-300 bg-white text-black px-3 py-2.5 text-[11px] font-extrabold flex items-center justify-center gap-2"><i class="fa-solid fa-diamond-turn-right"></i> Google Maps</a>
+          </div>
+          <button type="button" onclick="event.stopPropagation(); selectWorkshopFromCard(this)" class="w-full mt-2 min-h-11 rounded-xl bg-black text-white px-4 py-3 text-xs font-extrabold flex items-center justify-center gap-2 hover:bg-neutral-800 transition"><i class="fa-solid fa-calendar-check"></i> Book Bay</button>
+        </div>`;
+      }).join('');
+    }
+
+    function filterWorkshops() {
+      const term = document.getElementById('searchInput').value.toLowerCase();
+      let filtered = appState.workshops.filter(shop =>
+        shop.name.toLowerCase().includes(term) || (shop.location || '').toLowerCase().includes(term)
+      );
+      if (appState.activeFilter === '5km') filtered = filtered.filter(s => s.dist <= 5.0);
+      if (appState.activeFilter === 'oem') filtered = filtered.filter(s => s.oem === true);
+      if (appState.activeFilter === 'top') filtered = filtered.filter(s => Number.isFinite(s.rating) && s.rating >= 4.8);
+      renderWorkshops(filtered);
+    }
+
+    function setFilter(type) {
+      soundSynth.playClickSound();
+      appState.activeFilter = type;
+      ['all', '5km', 'oem', 'top'].forEach(t => {
+        const pill = document.getElementById(`pill-${t}`);
+        if (t === type) {
+          pill.className = "filter-pill px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-black text-white shrink-0";
+        } else {
+          pill.className = "filter-pill px-3.5 py-1.5 rounded-full text-xs font-bold bg-neutral-100 text-neutral-700 shrink-0";
+        }
+      });
+      filterWorkshops();
+    }
+
+    // ================= CHECKOUT TRANSITION & CONFIRMATION =================
+    // Resolve the selected workshop from the nearest card so IDs containing
+    // punctuation cannot break inline JavaScript handlers.
+    function selectWorkshopFromCard(element) {
+      const card = element && element.closest('[data-workshop-id]');
+      if (!card) {
+        showToast('Booking unavailable', 'Please tap Book Bay on a service-centre card again.', false);
+        return;
+      }
+      const id = card.getAttribute('data-workshop-id');
+      const shop = (appState.displayedWorkshops || []).find(w => String(w.id) === String(id))
+        || (appState.workshops || []).find(w => String(w.id) === String(id));
+      if (!shop) {
+        showToast('Workshop not available', 'Refresh nearby service centres and try again.', false);
+        return;
+      }
+      selectWorkshop(shop);
+    }
+
+    function selectWorkshop(workshopOrId) {
+      soundSynth.playPopSound();
+      const shop = typeof workshopOrId === 'object' && workshopOrId
+        ? workshopOrId
+        : (appState.displayedWorkshops || []).find(w => String(w.id) === String(workshopOrId))
+          || (appState.workshops || []).find(w => String(w.id) === String(workshopOrId));
+      if (!shop) {
+        showToast('Workshop not available', 'Refresh nearby service centres and try again.', false);
+        return;
+      }
+      appState.selectedWorkshop = shop;
+
+      document.getElementById('coWorkshopTitle').textContent = shop.name;
+      document.getElementById('coWorkshopMeta').textContent = `${shop.location || 'Address not listed'} • ${Number(shop.dist).toFixed(1)} km away${shop.phone ? ' • ' + shop.phone : ''}`;
+      document.getElementById('coWorkshopRating').textContent = Number.isFinite(shop.rating) ? `★ ${shop.rating.toFixed(1)}` : 'Rating not listed';
+
+      document.getElementById('coCarDetails').textContent = `${appState.vehicle.brand} ${appState.vehicle.model} (${appState.vehicle.year})`;
+      document.getElementById('coPlateNumber').textContent = appState.vehicle.reg;
+      document.getElementById('coOdometerKm').textContent = `${appState.vehicle.odometer.toLocaleString('en-IN')} KM`;
+
+      // Build Combined Services & Diagnosed Problems List
+      const listContainer = document.getElementById('coServicesList');
+      let itemsHtml = '';
+
+      appState.selectedServiceIds.forEach(sid => {
+        const serv = standardServices.find(s => s.id === sid);
+        if (serv) {
+          itemsHtml += `
+            <div class="p-2.5 bg-neutral-50 border border-neutral-200 rounded-xl flex justify-between items-center text-xs">
+              <div>
+                <p class="font-bold text-black">${serv.name}</p>
+                <p class="text-[10px] text-neutral-500">Service: Parts ₹${serv.partsCost} + Labor ₹${serv.laborCost}</p>
+              </div>
+              <span class="font-black text-black">₹${(serv.partsCost + serv.laborCost).toLocaleString('en-IN')}</span>
+            </div>
+          `;
+        }
+      });
+
+      appState.selectedProblemIds.forEach(pid => {
+        const prob = masterCarProblems.find(p => p.id === pid);
+        if (prob) {
+          itemsHtml += `
+            <div class="p-2.5 bg-red-50/50 border border-red-200 rounded-xl flex justify-between items-center text-xs">
+              <div>
+                <p class="font-bold text-red-950 flex items-center gap-1">
+                  <i class="fa-solid fa-wrench text-red-600 text-[10px]"></i>
+                  <span>${prob.title}</span>
+                </p>
+                <p class="text-[10px] text-neutral-500">Diagnostic fix: Parts ₹${prob.parts} + Labor ₹${prob.labor}</p>
+              </div>
+              <span class="font-black text-black">₹${(prob.parts + prob.labor).toLocaleString('en-IN')}</span>
+            </div>
+          `;
+        }
+      });
+
+      listContainer.innerHTML = itemsHtml || `<p class="text-xs text-neutral-400">No items selected.</p>`;
+      calculateCurrentBill();
+      const checkoutView = document.getElementById('view-checkout');
+      if (!checkoutView) {
+        showToast('Booking screen unavailable', 'The checkout section could not be loaded. Please reload QuickBay.', false);
+        return;
+      }
+      switchView('view-checkout');
+      checkoutView.scrollTop = 0;
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    function confirmBayBooking() {
+      soundSynth.playClickSound();
+      if (appState.paymentMethod === 'upi_online') {
+        // Trigger simulated UPI gateway flow
+        const btn = document.getElementById('confirmBookingBtn');
+        const orig = btn.innerHTML;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Contacting UPI Gateway...</span>`;
+        btn.disabled = true;
+
+        setTimeout(() => {
+          btn.innerHTML = orig;
+          btn.disabled = false;
+          const appNames = { gpay: "Google Pay UPI", phonepe: "PhonePe UPI", paytm: "Paytm UPI", qr: "Dynamic QR" };
+          appState.booking.upiApp = appNames[selectedUpiMethod] || "BHIM UPI";
+          finishBookingFlow(true);
+        }, 1100);
+      } else {
+        // Pay After Service at Workshop
+        finishBookingFlow(false);
+      }
+    }
+
+    async function finishBookingFlow(isOnlinePaid) {
+      const bookRef = `QB-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+      const gatePin = `${Math.floor(1000 + Math.random() * 9000)}`;
+      const utr = isOnlinePaid ? `${Math.floor(600000000000 + Math.random() * 399999999999)}` : "PAYABLE_AT_WORKSHOP";
+
+      appState.booking.id = bookRef;
+      appState.booking.pin = gatePin;
+      appState.booking.currentStage = 1;
+      appState.booking.paymentOption = isOnlinePaid ? "upi_online" : "after_service";
+      appState.booking.upiUtr = utr;
+      appState.booking.timestamp = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+      if (appState.authUser?.id) {
+        try {
+          await persistQuickBayBooking();
+        } catch (error) {
+          showToast("Booking not saved", error.message || "Supabase could not save this reservation. Please retry.", false);
+          return;
+        }
+      }
+      soundSynth.playSuccessSound();
+      document.getElementById('trackBookingId').textContent = bookRef;
+      document.getElementById('trackGatePin').textContent = gatePin;
+      document.getElementById('trackWorkshopName').textContent = appState.selectedWorkshop ? appState.selectedWorkshop.name : "Splash Automotive Works";
+      document.getElementById('trackCarName').textContent = `${appState.vehicle.brand} ${appState.vehicle.model} • ${appState.vehicle.reg} (${appState.vehicle.odometer} km)`;
+      document.getElementById('trackPaymentSummary').textContent = isOnlinePaid ? "Paid Online (UPI)" : "Pay at Workshop";
+
+      showToast(isOnlinePaid ? "UPI Payment Settled!" : "Bay Reserved!", `Reservation ${bookRef} locked. Technician ready.`);
+      switchView('view-tracking');
+    }
+
+    // ================= 9. LIVE BAY CCTV CANVAS STREAM ENGINE =================
+    let cctvInterval = null;
+    let cctvTick = 0;
+
+    function startCctvStreamEngine() {
+      const canvas = document.getElementById('cctvCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+
+      setInterval(() => {
+        // Live Running Timestamp
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const timeStr = `${pad(now.getDate())}-${pad(now.getMonth()+1)}-${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const tsEl = document.getElementById('cctvTimestamp');
+        if (tsEl) tsEl.textContent = timeStr;
+
+        // Draw animated CCTV Canvas scene based on active cam
+        cctvTick++;
+        renderCctvScene(ctx, canvas.width, canvas.height, appState.activeCctvCam, cctvTick);
+      }, 50);
+    }
+
+    function switchCctvCam(camNum) {
+      soundSynth.playClickSound();
+      appState.activeCctvCam = camNum;
+      [1, 2, 3].forEach(n => {
+        const btn = document.getElementById(`cctv-btn-${n}`);
+        if (n === camNum) {
+          btn.className = "py-1.5 rounded bg-neutral-800 text-white font-bold border border-white/20";
+        } else {
+          btn.className = "py-1.5 rounded bg-neutral-950 text-neutral-400 font-bold border border-transparent";
+        }
+      });
+
+      const labels = {
+        1: "CAM 01: Overhead Hydraulic Lift",
+        2: "CAM 02: Engine Bay Micro-Cam",
+        3: "CAM 03: Underchassis Laser Scanner"
+      };
+      document.getElementById('cctvCamLabel').textContent = labels[camNum];
+      showToast("CCTV Feed Switched", labels[camNum]);
+    }
+
+    function renderCctvScene(ctx, w, h, cam, tick) {
+      ctx.fillStyle = "#0c0d12";
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid / Guide Lines
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < w; x += 30) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, h);
+        ctx.stroke();
+      }
+      for (let y = 0; y < h; y += 30) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      if (cam === 1) {
+        // CAM 1: Overhead 2-Post Hydraulic Lift
+        // Lift posts
+        ctx.fillStyle = "#333";
+        ctx.fillRect(50, 20, 14, 160);
+        ctx.fillRect(336, 20, 14, 160);
+
+        // Moving lift arms
+        const liftY = 90 + Math.sin(tick * 0.04) * 4;
+        ctx.fillStyle = "#222";
+        ctx.fillRect(64, liftY, 272, 8);
+
+        // Vehicle silhouette on lift
+        ctx.fillStyle = "#1e222d";
+        ctx.beginPath();
+        ctx.roundRect(110, liftY - 38, 180, 40, 8);
+        ctx.fill();
+
+        ctx.fillStyle = "#0d0f14";
+        ctx.fillRect(145, liftY - 32, 110, 18); // cabin
+
+        // Wheels
+        ctx.fillStyle = "#111";
+        ctx.beginPath();
+        ctx.arc(135, liftY + 4, 12, 0, Math.PI * 2);
+        ctx.arc(265, liftY + 4, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Mechanic walking around
+        const techX = 180 + Math.sin(tick * 0.05) * 40;
+        ctx.fillStyle = "#3b82f6"; // Blue coveralls
+        ctx.beginPath();
+        ctx.arc(techX, 155, 6, 0, Math.PI * 2); // head
+        ctx.fill();
+        ctx.fillRect(techX - 4, 162, 8, 16); // body
+
+        // Laser crosshair
+        ctx.strokeStyle = "rgba(16, 185, 129, 0.4)";
+        ctx.strokeRect(techX - 12, 145, 24, 35);
+      } else if (cam === 2) {
+        // CAM 2: Engine Bay Micro-Cam
+        ctx.fillStyle = "#161a23";
+        ctx.fillRect(60, 40, 280, 120);
+
+        // Cylinder block lines
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(80, 60, 240, 80);
+
+        // 4 cylinder representations
+        for (let c = 0; c < 4; c++) {
+          const cx = 110 + (c * 60);
+          ctx.fillStyle = (Math.floor(tick / 15) % 4 === c) ? "#ef4444" : "#1e293b";
+          ctx.beginPath();
+          ctx.arc(cx, 100, 18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = "#94a3b8";
+          ctx.stroke();
+        }
+
+        // Live diagnostic text overlay
+        ctx.fillStyle = "#10b981";
+        ctx.font = "10px monospace";
+        ctx.fillText(`OIL VISCOSITY: 5W-30 SYNTH`, 80, 175);
+        ctx.fillText(`PRESSURE: ${(38 + Math.sin(tick * 0.1)*2).toFixed(1)} PSI`, 230, 175);
+      } else {
+        // CAM 3: Underchassis Laser Scanner
+        // Laser scanline sweeping across
+        const laserX = (tick * 4) % w;
+        ctx.fillStyle = "rgba(239, 68, 68, 0.15)";
+        ctx.fillRect(laserX - 8, 0, 16, h);
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(laserX, 0);
+        ctx.lineTo(laserX, h);
+        ctx.stroke();
+
+        // Exhaust pipe outline
+        ctx.strokeStyle = "#64748b";
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(90, 80);
+        ctx.quadraticCurveTo(180, 130, 310, 85);
+        ctx.stroke();
+
+        // Catalytic converter box
+        ctx.fillStyle = "#334155";
+        ctx.fillRect(170, 95, 60, 28);
+
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "9px monospace";
+        ctx.fillText("SCANNING UNDERBODY: 0 CRACKS DETECTED", 20, 180);
+      }
+    }
+
+    function captureCctvSnapshot() {
+      // 1. Play Shutter Sound & Flash
+      soundSynth.playShutterSound();
+      const flash = document.getElementById('cameraFlashOverlay');
+      flash.classList.remove('opacity-0');
+      flash.classList.add('opacity-90');
+      setTimeout(() => {
+        flash.classList.remove('opacity-90');
+        flash.classList.add('opacity-0');
+      }, 120);
+
+      // 2. Capture canvas thumbnail
+      const canvas = document.getElementById('cctvCanvas');
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+      const thumbBox = document.getElementById('snapshotThumbContainer');
+      thumbBox.innerHTML = `<img src="${dataUrl}" class="w-full h-full object-cover" />`;
+      
+      const now = new Date();
+      document.getElementById('snapshotTimestampText').textContent = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} • Bay #03 Active`;
+      document.getElementById('snapshotPreviewCard').classList.remove('hidden');
+
+      showToast("Snapshot Logged", "High-res bay photograph recorded to digital inspection file.");
+    }
+
+    // ================= 10. 5-STAGE PIPELINE UI =================
+    function renderTrackingPipeline() {
+      const container = document.getElementById('timelineContainer');
+      const cur = appState.booking.currentStage;
+
+      container.innerHTML = trackingPipelineStages.map(stageItem => {
+        const isDone = stageItem.stage < cur;
+        const isActive = stageItem.stage === cur;
+
+        let iconBg = "bg-neutral-200 text-neutral-500";
+        let statusBadge = `<span class="text-[9px] font-bold text-neutral-400">Upcoming</span>`;
+
+        if (isDone) {
+          iconBg = "bg-emerald-600 text-white";
+          statusBadge = `<span class="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">Completed</span>`;
+        } else if (isActive) {
+          iconBg = "bg-black text-white ring-4 ring-black/10 animate-pulse";
+          statusBadge = `<span class="text-[9px] font-extrabold text-white bg-black px-2 py-0.5 rounded">In Progress</span>`;
+        }
+
+        return `
+          <div class="flex items-start gap-3.5 relative">
+            <div class="w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0 text-xs font-bold z-10">
+              <i class="fa-solid ${stageItem.icon}"></i>
+            </div>
+            <div class="flex-1 pb-4">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-black ${isActive ? 'text-black' : isDone ? 'text-neutral-800' : 'text-neutral-400'}">${stageItem.title}</h4>
+                ${statusBadge}
+              </div>
+              <p class="text-[10px] ${isActive ? 'text-neutral-600 font-medium' : 'text-neutral-400'} mt-0.5">${stageItem.subtitle}</p>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('trackStatusBadge').textContent = `Stage ${cur} of 5: ${trackingPipelineStages[cur-1].statusText}`;
+    }
+
+    function simulateAdvanceStage() {
+      soundSynth.playPopSound();
+      if (appState.booking.currentStage < 5) {
+        appState.booking.currentStage++;
+        renderTrackingPipeline();
+        showToast(`Stage Advanced`, `Now at Stage ${appState.booking.currentStage}: ${trackingPipelineStages[appState.booking.currentStage-1].title}`);
+      } else {
+        soundSynth.playSuccessSound();
+        showToast("Handover Complete", "Vehicle washed, tested, and ready for departure!");
+      }
+    }
+
+    // ================= 11. GST TAX INVOICE GENERATOR =================
+    function viewGeneratedInvoice() {
+      soundSynth.playClickSound();
+      document.getElementById('invNumber').textContent = `QB-INV-${new Date().getFullYear()}-${appState.booking.id.replace('QB-2026-', '')}`;
+      document.getElementById('invDate').textContent = appState.booking.timestamp;
+      document.getElementById('invShopName').textContent = appState.selectedWorkshop ? appState.selectedWorkshop.name : "Splash Automotive Works";
+      document.getElementById('invShopAddr').textContent = appState.selectedWorkshop ? appState.selectedWorkshop.location : "PWD Road, Manavalanagar, TN";
+
+      document.getElementById('invCustName').textContent = appState.user.name;
+      document.getElementById('invCustEmail').textContent = appState.user.email;
+      document.getElementById('invCustPhone').textContent = `+91 ${appState.user.phone}`;
+
+      document.getElementById('invCarModel').textContent = `${appState.vehicle.brand} ${appState.vehicle.model} (${appState.vehicle.year})`;
+      document.getElementById('invCarPlate').textContent = appState.vehicle.reg;
+      document.getElementById('invCarOdo').textContent = `${appState.vehicle.odometer.toLocaleString('en-IN')} KM`;
+
+      const isUpi = (appState.booking.paymentOption === 'upi_online');
+      const badge = document.getElementById('invPaymentStatusBadge');
+      if (isUpi) {
+        badge.className = "text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded";
+        badge.textContent = "SETTLED VIA UPI";
+        document.getElementById('invSettlementDesc').textContent = `Paid via ${appState.booking.upiApp}`;
+        document.getElementById('invUpiUtr').textContent = appState.booking.upiUtr;
+      } else {
+        badge.className = "text-[9px] font-black uppercase bg-amber-100 text-amber-800 px-2 py-0.5 rounded";
+        badge.textContent = "PAY AT WORKSHOP";
+        document.getElementById('invSettlementDesc').textContent = "Payable at Workshop (Cash / Card / UPI)";
+        document.getElementById('invUpiUtr').textContent = "PENDING_COUNTER_SETTLEMENT";
+      }
+
+      // Render Itemized Table: Standard Services + Diagnosed Problems
+      const tableBody = document.getElementById('invTableBody');
+      let itemHtml = '';
+
+      appState.selectedServiceIds.forEach(sid => {
+        const serv = standardServices.find(s => s.id === sid);
+        if (serv) {
+          itemHtml += `
+            <tr class="py-1.5">
+              <td class="py-1 font-semibold text-black">${serv.name} <span class="text-[9px] text-neutral-400 block">${serv.desc.slice(0, 48)}...</span></td>
+              <td class="py-1 text-center font-mono text-neutral-500">${serv.hsn}</td>
+              <td class="py-1 text-right font-bold text-black">₹${(serv.partsCost + serv.laborCost).toLocaleString('en-IN')}</td>
+            </tr>
+          `;
+        }
+      });
+
+      appState.selectedProblemIds.forEach(pid => {
+        const prob = masterCarProblems.find(p => p.id === pid);
+        if (prob) {
+          itemHtml += `
+            <tr class="py-1.5">
+              <td class="py-1 font-semibold text-black">${prob.title} <span class="text-[9px] text-red-500 block">Symptom Diagnostic Fix</span></td>
+              <td class="py-1 text-center font-mono text-neutral-500">${prob.hsn}</td>
+              <td class="py-1 text-right font-bold text-black">₹${(prob.parts + prob.labor).toLocaleString('en-IN')}</td>
+            </tr>
+          `;
+        }
+      });
+
+      if (appState.booking.totals.valet > 0) {
+        itemHtml += `
+          <tr class="py-1.5">
+            <td class="py-1 font-semibold text-black">Doorstep Valet Pickup &amp; Return Escort</td>
+            <td class="py-1 text-center font-mono text-neutral-500">998719</td>
+            <td class="py-1 text-right font-bold text-black">₹199</td>
+          </tr>
+        `;
+      }
+
+      tableBody.innerHTML = itemHtml;
+
+      const sub = appState.booking.totals.subtotal;
+      const halfGst = Math.round(appState.booking.totals.gst / 2);
+      document.getElementById('invSubtotal').textContent = `₹${sub.toLocaleString('en-IN')}`;
+      document.getElementById('invCgst').textContent = `₹${halfGst.toLocaleString('en-IN')}`;
+      document.getElementById('invSgst').textContent = `₹${halfGst.toLocaleString('en-IN')}`;
+      document.getElementById('invGrandTotal').textContent = `₹${appState.booking.totals.total.toLocaleString('en-IN')}`;
+
+      switchView('view-invoice');
+    }
+
+    // ================= 12. 15,000+ DIRECTORY EXPORTER =================
+    function exportFullDirectory() {
+      soundSynth.playClickSound();
+      showToast("Generating Dataset", "Compiling 15,000+ certified garage entries...", false);
+
+      setTimeout(() => {
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Workshop_ID,Workshop_Name,City,State,Pincode,Rating,Reviews_Count,OEM_Certified,Live_Bays,Contact_Phone\n";
+
+        const stateList = ["Tamil Nadu", "Karnataka", "Telangana", "Maharashtra", "Delhi NCR", "Gujarat", "Rajasthan", "Kerala"];
+        const cityList = ["Tiruvallur", "Chennai", "Bengaluru", "Hyderabad", "Mumbai", "Pune", "Delhi", "Coimbatore"];
+        const brandNames = ["Splash", "Apex", "Maruti Authorized", "Hyundai Care", "Bosch Service", "Castrol Auto", "TVS Mobility", "Precision Bay"];
+
+        for (let i = 1; i <= 15000; i++) {
+          const brand = brandNames[i % brandNames.length];
+          const city = cityList[i % cityList.length];
+          const state = stateList[i % stateList.length];
+          const pin = 600000 + (i % 89999);
+          const rating = (4.5 + ((i * 3) % 6) * 0.1).toFixed(1);
+          const reviews = 50 + ((i * 17) % 750);
+          const isOem = (i % 2 === 0) ? "YES" : "NO";
+          const bays = 2 + (i % 8);
+          const phone = `+91${9800000000 + (i * 47) % 1000000000}`;
+
+          csvContent += `QB-${100000 + i},"${brand} Certified Auto Bay #${i}",${city},${state},${pin},${rating},${reviews},${isOem},${bays},${phone}\n`;
+        }
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `QuickBay_15000_Garages_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        soundSynth.playSuccessSound();
+        showToast("Download Complete", "Exported 15,000+ garage directory to CSV.");
+      }, 600);
+    }
+
+    // ================= 13. CITY SELECTION & MODAL =================
+    function populateCityModalList() {
+      const container = document.getElementById('cityListContainer');
+      container.innerHTML = quickBayCities.map(city => `
+        <div onclick="selectCity('${city.id}')" class="p-3 rounded-xl border border-neutral-200 hover:border-black cursor-pointer flex items-center justify-between transition">
+          <div>
+            <h5 class="text-xs font-black text-black">${city.name}</h5>
+            <p class="text-[10px] text-neutral-400">${city.state} • ${city.count}</p>
+          </div>
+          <i class="fa-solid fa-chevron-right text-[10px] text-neutral-400"></i>
+        </div>
+      `).join('');
+    }
+
+    function filterCityList() {
+      const term = document.getElementById('citySearchBox').value.toLowerCase();
+      const container = document.getElementById('cityListContainer');
+      const filtered = quickBayCities.filter(c => c.name.toLowerCase().includes(term) || c.state.toLowerCase().includes(term));
+      container.innerHTML = filtered.map(city => `
+        <div onclick="selectCity('${city.id}')" class="p-3 rounded-xl border border-neutral-200 hover:border-black cursor-pointer flex items-center justify-between transition">
+          <div>
+            <h5 class="text-xs font-black text-black">${city.name}</h5>
+            <p class="text-[10px] text-neutral-400">${city.state} • ${city.count}</p>
+          </div>
+          <i class="fa-solid fa-chevron-right text-[10px] text-neutral-400"></i>
+        </div>
+      `).join('');
+    }
+
+    function selectCity(cityId) {
+      soundSynth.playPopSound();
+      const city = quickBayCities.find(c => c.id === cityId);
+      if (!city) return;
+      appState.currentCity = city;
+      appState.userLocation = null;
+      const liveStatus = document.getElementById('liveLocationStatus');
+      if (liveStatus) liveStatus.textContent = "Use your device location to sort nearby centres";
+      appState.user.city = city.name;
+      document.getElementById('headerCityName').textContent = city.name;
+      document.getElementById('nearbyWorkshopsSubtitle').textContent = `Demo preview near ${city.name} • tap “Find service centres near me” for real listings`;
+
+      appState.workshops = generateWorkshopsForCity(city);
+      appState.selectedWorkshop = appState.workshops[0];
+      renderWorkshops(appState.workshops);
+
+      if (appState.mapInstance) {
+        updateMapLocations();
+      }
+
+      closeCityModal();
+      showToast("Hub Switched", `Active location set to ${city.name}`);
+    }
+
+    function openCityModal() {
+      soundSynth.playClickSound();
+      document.getElementById('cityModal').classList.remove('hidden');
+    }
+
+    function closeCityModal() {
+      document.getElementById('cityModal').classList.add('hidden');
+    }
+
+    // Fetch real nearby automotive repair/service listings from OpenStreetMap.
+    // OSM records may omit phone numbers, opening hours and ratings; absent fields stay absent.
+    async function fetchNearbyServiceCentres(lat, lng, radiusMeters = 20000) {
+      const query = `[out:json][timeout:25];(nwr(around:${radiusMeters},${lat},${lng})["shop"="car_repair"];nwr(around:${radiusMeters},${lat},${lng})["amenity"="car_repair"];nwr(around:${radiusMeters},${lat},${lng})["craft"="car_repair"];);out center tags;`;
+      const endpoints = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter'
+      ];
+      let lastError = null;
+
+      for (const endpoint of endpoints) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+            body: new URLSearchParams({ data: query }),
+            signal: AbortSignal.timeout(30000)
+          });
+          if (!response.ok) throw new Error(`Directory request failed (${response.status})`);
+          const payload = await response.json();
+          const unique = new Map();
+          (payload.elements || []).forEach(element => {
+            const tags = element.tags || {};
+            const name = (tags.name || tags['name:en'] || '').trim();
+            const point = element.type === 'node'
+              ? { lat: element.lat, lng: element.lon }
+              : { lat: element.center?.lat, lng: element.center?.lon };
+            if (!name || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return;
+
+            const addressParts = [
+              tags['addr:housenumber'], tags['addr:street'], tags['addr:suburb'],
+              tags['addr:city'] || tags['addr:town'] || tags['addr:village'],
+              tags['addr:postcode']
+            ].filter(Boolean);
+            const address = tags['addr:full'] || addressParts.join(', ') || tags.description || 'Address not listed in OpenStreetMap';
+            const phone = tags['contact:phone'] || tags.phone || tags['contact:mobile'] || '';
+            const ratingValue = Number(tags.rating || tags.stars);
+            const shop = {
+              id: `osm-${element.type}-${element.id}`,
+              name,
+              location: address,
+              dist: parseFloat(calculateDistance(lat, lng, point.lat, point.lng)),
+              rating: Number.isFinite(ratingValue) && ratingValue > 0 ? ratingValue : null,
+              reviews: null,
+              oem: false,
+              bays: null,
+              coords: [point.lat, point.lng],
+              phone,
+              source: 'OpenStreetMap'
+            };
+            unique.set(shop.id, shop);
+          });
+          return Array.from(unique.values()).sort((a, b) => a.dist - b.dist);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError || new Error('The live service-centre directory is unavailable.');
+    }
+
+    function useCurrentGpsLocation() {
+      if (!navigator.geolocation) {
+        showToast("Location unavailable", "Your browser does not support device location.", false);
+        return;
+      }
+
+      const status = document.getElementById('liveLocationStatus');
+      const button = document.getElementById('liveLocationButton');
+      if (status) status.textContent = "Requesting your location…";
+      if (button) button.disabled = true;
+
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        appState.userLocation = { lat, lng, accuracy: position.coords.accuracy };
+        document.getElementById('headerCityName').textContent = "Your Live Location";
+        document.getElementById('nearbyWorkshopsSubtitle').textContent = "Searching real OpenStreetMap service-centre listings within 20 km…";
+        if (status) status.textContent = "Location found • loading nearby real service centres…";
+        if (appState.mapInstance) appState.mapInstance.setView([lat, lng], 13);
+
+        try {
+          const liveShops = await fetchNearbyServiceCentres(lat, lng);
+          appState.workshops = liveShops;
+          appState.selectedWorkshop = liveShops[0] || null;
+          document.getElementById('nearbyWorkshopsSubtitle').textContent = liveShops.length
+            ? `${liveShops.length} real OpenStreetMap listings within 20 km • sorted by distance`
+            : "No mapped car-repair/service listings found within 20 km. Try again later or expand the search area.";
+          if (status) status.textContent = `Live location active • ${liveShops.length} real listings found • GPS accuracy ${Math.round(position.coords.accuracy)} m`;
+          filterWorkshops();
+          if (appState.mapInstance) updateMapLocations();
+          soundSynth.playSuccessSound();
+          showToast("Nearby directory updated", `${liveShops.length} OpenStreetMap service-centre listings found within 20 km.`);
+        } catch (error) {
+          // Do not present generated preview entries as real businesses.
+          appState.workshops = [];
+          appState.selectedWorkshop = null;
+          document.getElementById('nearbyWorkshopsSubtitle').textContent = "Live directory could not be reached. No demo businesses are being shown as real listings.";
+          if (status) status.textContent = "GPS active • live directory unavailable • tap to retry";
+          filterWorkshops();
+          if (appState.mapInstance) updateMapLocations();
+          showToast("Service-centre directory unavailable", "The OpenStreetMap service is busy or unreachable. Please retry in a moment.", false);
+        } finally {
+          if (button) button.disabled = false;
+        }
+      }, (error) => {
+        if (button) button.disabled = false;        if (status) status.textContent = "Location not enabled • tap to try again";
+        const messages = {
+          1: "Location permission was denied. Allow location access in your browser settings and try again.",
+          2: "Your device could not determine its location. Check GPS and try again.",
+          3: "The location request timed out. Please try again."
+        };
+        showToast("Couldn't get your location", messages[error.code] || "Please check your location settings and try again.", false);
+      }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+    }
+
+    // ================= 14. LEAFLET MAP MODAL =================
+    function openMapModal() {
+      soundSynth.playClickSound();
+      const modal = document.getElementById('mapModal');
+      document.getElementById('mapModalTitle').textContent = appState.userLocation ? "Garages near your live location" : `Garages near ${appState.currentCity.name}`;
+      modal.classList.remove('hidden');
+
+      setTimeout(() => {
+        if (!appState.mapInstance) {
+          const mapCenter = appState.userLocation ? [appState.userLocation.lat, appState.userLocation.lng] : [appState.currentCity.lat, appState.currentCity.lng];
+          appState.mapInstance = L.map('leafletMap').setView(mapCenter, 12);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap'
+          }).addTo(appState.mapInstance);
+          updateMapLocations();
+        } else {
+          const mapCenter = appState.userLocation ? [appState.userLocation.lat, appState.userLocation.lng] : [appState.currentCity.lat, appState.currentCity.lng];
+          appState.mapInstance.setView(mapCenter, 12);
+          updateMapLocations();
+          appState.mapInstance.invalidateSize();
+        }
+      }, 150);
+    }
+
+    function updateMapLocations() {
+      if (!appState.mapInstance) return;
+      appState.mapMarkers.forEach(m => appState.mapInstance.removeLayer(m));
+      appState.mapMarkers = [];
+
+      if (appState.userLocation) {
+        const userMarker = L.circleMarker([appState.userLocation.lat, appState.userLocation.lng], {
+          radius: 9, color: '#ffffff', weight: 3, fillColor: '#059669', fillOpacity: 1
+        }).addTo(appState.mapInstance);
+        userMarker.bindPopup('<b>Your current location</b>');
+        appState.mapMarkers.push(userMarker);
+      }
+
+      appState.workshops.forEach(shop => {
+        const marker = L.marker(shop.coords).addTo(appState.mapInstance);
+        marker.bindPopup(`
+          <div style="font-family: inherit; font-size: 12px; line-height: 1.4; min-width: 170px;">
+            <b style="font-size: 13px;">${escapeWorkshopText(shop.name)}</b><br>
+            <span style="color: #666;">${escapeWorkshopText(shop.location || 'Address not listed')}</span><br>
+            <div style="margin-top: 4px; display: flex; justify-content: space-between; align-items: center;">
+              <span>${Number.isFinite(shop.rating) ? `★ ${shop.rating.toFixed(1)}` : 'Rating not listed'}</span>
+              <b style="color: #000;">${Number(shop.dist).toFixed(1)} km</b>
+            </div>
+            <a href="${workshopDirectionsUrl(shop)}" target="_blank" rel="noopener" style="display:block; margin-top: 6px; background: #000; color: #fff; text-align:center; padding: 5px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">
+              Get Directions
+            </a>
+          </div>
+        `);
+        appState.mapMarkers.push(marker);
+      });
+    }
+
+    function closeMapModal() {
+      document.getElementById('mapModal').classList.add('hidden');
+    }
+
+    // ================= 15. PROFILE EDITING =================
+    function syncProfileFields() {
+      document.getElementById('profDisplayName').textContent = appState.user.name;
+      document.getElementById('profDisplayEmail').textContent = appState.user.email;
+      document.getElementById('profAvatarLetter').textContent = appState.user.name.charAt(0).toUpperCase();
+
+      document.getElementById('profNameInput').value = appState.user.name;
+      document.getElementById('profEmailInput').value = appState.user.email;
+      document.getElementById('profPhoneInput').value = appState.user.phone;
+    }
+
+    function saveUserProfile() {
+      soundSynth.playPopSound();
+      const name = document.getElementById('profNameInput').value.trim();
+      const email = document.getElementById('profEmailInput').value.trim();
+      const phone = document.getElementById('profPhoneInput').value.trim();
+
+      if (!name || !email || !phone) {
+        showToast("Missing Fields", "Please complete all profile fields.", false);
+        return;
+      }
+
+      appState.user.name = name;
+      appState.user.email = email;
+      appState.user.phone = phone;
+
+      syncProfileFields();
+      showToast("Profile Updated", "Your QuickBay account settings are saved.");
+      switchView('view-dashboard');
+    }
+  </script>
+</body>
+</html>
