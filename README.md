@@ -110,12 +110,15 @@ Do not commit OAuth client secrets, service-role keys, access tokens or private 
 
 ```text
 .
+├── .gitignore
 ├── assets/
 │   └── quickbay-banner.svg
+├── CONTRIBUTING.md
 ├── index.html
-├── supabase/
-│   └── GOOGLE_AUTH_SETUP.md
-└── README.md
+├── README.md
+├── SECURITY.md
+└── supabase/
+    └── GOOGLE_AUTH_SETUP.md
 ```
 
 ## Development notes
@@ -124,6 +127,12 @@ Do not commit OAuth client secrets, service-role keys, access tokens or private 
 - Preserve the existing customer-facing flows when making UI changes.
 - Treat external map listings separately from approved workshop records.
 - Test location permissions, map loading, authentication redirects and booking persistence before calling a feature production-ready.
+
+## Contributing and security
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes.
+- Read [SECURITY.md](SECURITY.md) for safe vulnerability reporting and credential-handling guidance.
+- Never commit OAuth client secrets, Supabase service-role keys or private tokens.
 
 ## Roadmap
 
